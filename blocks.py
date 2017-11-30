@@ -67,3 +67,13 @@ class Blocks:
 
         layer = layer + residual
         return layer
+
+    def fc(self, input_layer, input_channels, output_channels):
+        weights = self.create_weights('fc_weights', [input_channels, output_channels])
+        flattened_input = tf.reshape(input_layer, [-1, input_channels])
+        pre_bias = tf.matmul(flattened_input, weights)
+        result = self.add_bias(pre_bias)
+        return result
+
+    def add_bias(self, layer):
+        return tf.contrib.layers.bias_add(layer)

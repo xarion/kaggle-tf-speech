@@ -1,10 +1,15 @@
 import tensorflow as tf
 
-from data import Data
+from dataset import Dataset
+from model import Model
 
 with tf.Session() as sess:
-    data = Data()
-    writer = tf.summary.FileWriter("summaries")
+    with tf.device("/cpu:0"):
+        data = Dataset(split="training", batch_size=128)
+    with tf.device("/gpu:0"):
+        model = Model(data=data)
+
+    writer = tf.summary.FileWriter("summaries", sess.graph)
 
     merged = tf.summary.merge_all()
 
@@ -13,9 +18,14 @@ with tf.Session() as sess:
 
     coord = tf.train.Coordinator()
     queueRunners = tf.train.start_queue_runners(sess=sess, coord=coord)
-    summaries, = sess.run([merged])
+    step = 0
+    while step < 20000:
+        m, _, loss, step, = sess.run([merged,
+                                      model.training_step,
+                                      model.loss,
+                                      model.global_step])
 
-    writer.add_summary(summaries)
+        writer.add_summary(m, step)
     writer.flush()
     writer.close()
     coord.request_stop()
