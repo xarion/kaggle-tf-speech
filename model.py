@@ -9,6 +9,8 @@ class Model:
         self.labels = data.labels
         self.blocks = Blocks()
 
+        self.input = tf.reshape(self.input, [-1, 98, 40, 1])
+
         with tf.variable_scope("conv_1"):
             conv_1 = self.blocks.conv2d(self.input, [8, 20, 1, 64])
             conv_1 = self.blocks.normalized_relu_activation(conv_1)
@@ -91,7 +93,7 @@ class Model:
         with tf.variable_scope("accuracy"):
             self.logits = final_fc
             one_hot_labels = tf.one_hot(self.labels, label_count)
-            prediction = tf.argmax(self.logits, axis=1)
+            prediction = tf.cast(tf.argmax(self.logits, axis=1), tf.int32)
             self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.labels, prediction), dtype=tf.float32))
             classification_loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.logits,
                                                                           labels=one_hot_labels)
@@ -105,19 +107,17 @@ class Model:
 
         with tf.variable_scope("all_losses"):
             self.loss = self.classification_loss
-            with tf.device("/cpu:0"):
-                # tf.summary.scalar("decay", decay)
-                tf.summary.scalar("classification_loss", self.classification_loss)
-                tf.summary.scalar("total_loss", self.loss)
+            # tf.summary.scalar("decay", decay)
+            tf.summary.scalar("classification_loss", self.classification_loss)
+            tf.summary.scalar("total_loss", self.loss)
 
         with tf.variable_scope('classification_gradient'):
             boundaries = [15000, 18000]
             values = [0.001, 0.0001, 0.00001]
 
-            with tf.device("/cpu:0"):
-                self.global_step = tf.Variable(0, name='global_step', trainable=False)
-                self.learning_rate = tf.train.piecewise_constant(self.global_step, boundaries, values)
-                tf.summary.scalar('learning_rate', self.learning_rate)
+            self.global_step = tf.Variable(0, name='global_step', trainable=False)
+            self.learning_rate = tf.train.piecewise_constant(self.global_step, boundaries, values)
+            tf.summary.scalar('learning_rate', self.learning_rate)
 
             self.optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate)
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)

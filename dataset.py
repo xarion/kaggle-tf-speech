@@ -21,15 +21,18 @@ class Dataset:
     def __init__(self, split, batch_size):
         self.file_list = DATASET_SPLITS[split]
         self.batch_size = batch_size
+        self.create_label_lookup_table()
         files = self.get_file_names()
 
         full_file_path = self.convert_to_string_input_producer(self.get_full_path_file_names(files))
 
         # (AUDIO_SAMPLE_RATE * 1) because we want 1 second samples.
         full_file_name, raw_data = self.decode_wav_queue(full_file_path, AUDIO_SAMPLE_RATE * 1)
-        string_parts = tf.string_split(full_file_name, '/')
+        string_parts = tf.string_split([full_file_name], '/').values
         file_name = string_parts[-1]
-        string_label = string_parts[-2]
+        speaker_id = tf.string_split([file_name], '_').values[0]
+        label_name = string_parts[-2]
+        label_id = self.label_lookup_table.lookup(label_name)
 
         if split == "training":
             background_noise = self.get_background_noise()
@@ -49,21 +52,19 @@ class Dataset:
             AUDIO_SAMPLE_RATE,
             dct_coefficient_count=DTC_COEFFICIENT_COUNT)
 
-
-        self.inputs, self.input_ids, self.labels, self.speaker_ids, \
+        self.inputs, self.labels, self.speaker_ids, \
         self.background_noise, self.raw_data, self.noisy_data, self.files \
-            = tf.train.batch([mfcc, input_id.dequeue(), labels.dequeue(), speaker_id.dequeue(),
-                              background_noise_queue.dequeue(), raw_data_queue.dequeue(),
-                              noisy_data_queue.dequeue(), file_queue.dequeue()],
-                             shapes=((98, 40, 1), (), (), (), (16000, 1), (16000, 1), (16000, 1), ()),
+            = tf.train.batch([tf.expand_dims(mfcc, -1), label_id, speaker_id,
+                              background_noise, raw_data,
+                              noisy_data, file_name],
+                             shapes=((1, 98, 40, 1), (), (), (16000, 1), (16000, 1), (16000, 1), ()),
                              batch_size=self.batch_size,
-                             num_threads=1,
-                             capacity=self.dataset_size)
-        with tf.device("/cpu:0"):
-            tf.summary.audio("raw_data", self.raw_data, sample_rate=16000)
-            # tf.summary.text("label", tf.cast(self.labels, dtype=tf.string))
-            tf.summary.audio("noisy_data", self.noisy_data, sample_rate=16000)
-            tf.summary.text("file name", self.files)
+                             num_threads=4,
+                             capacity=batch_size * 4)
+        tf.summary.audio("raw_data", self.raw_data, sample_rate=16000)
+        # tf.summary.text("label", tf.cast(self.labels, dtype=tf.string))
+        tf.summary.audio("noisy_data", self.noisy_data, sample_rate=16000)
+        tf.summary.text("file name", self.files)
 
     def get_file_names(self):
         with open(self.file_list) as f:
@@ -141,3 +142,38 @@ class Dataset:
         background_multiplier = tf.random_uniform([], minval=0, maxval=0.1, dtype=tf.float32)
         background_noise = background_sample * background_multiplier
         return background_noise
+
+    def create_label_lookup_table(self):
+        dataset_labels = ["_background_noise_", "bird", "dog", "eight", "four", "happy", "left", "nine", "off", "one",
+                          "seven", "six", "three", "two", "wow", "zero", "bed", "cat", "down", "five", "go", "house",
+                          "marvin", "no", "on", "right", "sheila", "stop", "tree", "up", "yes"]
+
+        competition_labels = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go", "silence",
+                              "unknown"]
+
+        competition_labels_to_ids = dict(zip(competition_labels, range(0, len(competition_labels))))
+
+        dataset_labels_to_ids = dict()
+        for dataset_label in dataset_labels:
+            if dataset_label in competition_labels_to_ids:
+                dataset_labels_to_ids[dataset_label] = competition_labels_to_ids[dataset_label]
+            elif dataset_label == "_background_noise_":
+                dataset_labels_to_ids[dataset_label] = competition_labels_to_ids["silence"]
+            else:
+                dataset_labels_to_ids[dataset_label] = competition_labels_to_ids["unknown"]
+
+        items = dataset_labels_to_ids.items()
+
+        keys, values = zip(*items)
+
+        table = tf.contrib.lookup.HashTable(
+            tf.contrib.lookup.KeyValueTensorInitializer(keys, values), -1
+        )
+
+        #initialize it now
+        table.init.run()
+
+        self.label_lookup_table = table
+        self.competition_labels = competition_labels
+        self.dataset_labels = dataset_labels
+        self.label_lookup_dict = dataset_labels_to_ids
