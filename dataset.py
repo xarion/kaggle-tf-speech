@@ -23,21 +23,22 @@ class Dataset:
         self.batch_size = batch_size
         self.create_label_lookup_table()
 
-        random_selector_variable = tf.random_uniform([], minval=0, maxval=1, dtype=tf.float32)
-        silent_data, silent_labels = self.get_silent_records()
-        labeled_data, labeled_labels = self.get_labeled_records()
+        with tf.device("/cpu:0"):
+            random_selector_variable = tf.random_uniform([], minval=0, maxval=1, dtype=tf.float32)
+            silent_data, silent_labels = self.get_silent_records()
+            labeled_data, labeled_labels = self.get_labeled_records()
 
-        raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
-                                     true_fn=lambda: (silent_data, silent_labels),
-                                     false_fn=lambda: (labeled_data, labeled_labels))
+            raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
+                                         true_fn=lambda: (silent_data, silent_labels),
+                                         false_fn=lambda: (labeled_data, labeled_labels))
 
-        if split == "training":
-            background_noise = self.get_background_noise()
-        else:
-            background_noise = tf.zeros([AUDIO_SAMPLE_RATE * 1, 1])
+            if split == "training":
+                background_noise = self.get_background_noise()
+            else:
+                background_noise = tf.zeros([AUDIO_SAMPLE_RATE * 1, 1])
 
-        noisy_data = raw_data + background_noise
-        noisy_data = tf.clip_by_value(noisy_data, -1.0, 1.0)
+            noisy_data = raw_data + background_noise
+            noisy_data = tf.clip_by_value(noisy_data, -1.0, 1.0)
 
         spectrogram = audio_ops.audio_spectrogram(
             noisy_data,
@@ -54,12 +55,12 @@ class Dataset:
             tf.train.shuffle_batch([mfcc, label_id, background_noise, raw_data, noisy_data],
                                    shapes=((1, 98, 40, 1), (), (16000, 1), (16000, 1), (16000, 1)),
                                    batch_size=self.batch_size,
-                                   num_threads=4,
-                                   capacity=batch_size * 10,
-                                   min_after_dequeue=batch_size * 8)
-        tf.summary.audio("raw_data", self.raw_data, sample_rate=16000)
+                                   num_threads=12,
+                                   capacity=batch_size * 20,
+                                   min_after_dequeue=batch_size * 16)
+        # tf.summary.audio("raw_data", self.raw_data, sample_rate=16000)
         # tf.summary.text("label", tf.cast(self.labels, dtype=tf.string))
-        tf.summary.audio("noisy_data", self.noisy_data, sample_rate=16000)
+        # tf.summary.audio("noisy_data", self.noisy_data, sample_rate=16000)
 
     def get_labeled_records(self):
         with tf.variable_scope("labeled_records"):

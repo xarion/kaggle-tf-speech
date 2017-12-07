@@ -9,13 +9,13 @@ CHECKPOINT_NAME = "model"
 tf.logging.set_verbosity(tf.logging.INFO)
 
 with tf.Session() as sess:
-    data = Dataset(split="training", batch_size=100)
+    data = Dataset(split="training", batch_size=128)
     model = Model(data=data)
 
     train_writer = tf.summary.FileWriter("summaries/train", sess.graph)
     merged = tf.summary.merge_all()
 
-    saver = tf.train.Saver(max_to_keep=1, keep_checkpoint_every_n_hours=3)
+    saver = tf.train.Saver(max_to_keep=3, keep_checkpoint_every_n_hours=3)
 
     sess.run(tf.variables_initializer(tf.global_variables()))
     sess.run(tf.variables_initializer(tf.local_variables()))
@@ -33,7 +33,6 @@ with tf.Session() as sess:
                                                             model.labels, model.accuracy])
             last_step = step
             tf.logging.info("step %d, loss %.6f, accuracy %.2f" % (step, loss, accuracy))
-            tf.logging.info(labels)
             train_writer.add_summary(m, step)
             if step % CHECKPOINT_STEP == 0:
                 saver.save(sess, CHECKPOINT_FOLDER + '/' + CHECKPOINT_NAME, global_step=step)
