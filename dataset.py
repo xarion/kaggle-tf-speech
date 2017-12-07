@@ -7,7 +7,9 @@ DATA_DIR = "/home/erdi/dev/data/train/"
 TRAINING_LIST = "training_list.txt"
 VALIDATION_LIST = "validation_list.txt"
 TEST_LIST = "test_list.txt"
-DATASET_SPLITS = {"training": TRAINING_LIST, "validation": VALIDATION_LIST, "test": TEST_LIST}
+SUBMISSION_LIST = "submission_list.txt"
+DATASET_SPLITS = {"training": TRAINING_LIST, "validation": VALIDATION_LIST, "test": TEST_LIST,
+                  "submission": SUBMISSION_LIST}
 AUDIO_DIR = DATA_DIR + 'audio/'
 AUDIO_SAMPLE_RATE = 16000
 SPECTOGRAM_WINDOW_SIZE = 480
@@ -20,17 +22,14 @@ class Dataset:
         self.file_list = DATASET_SPLITS[split]
         self.batch_size = batch_size
         files = self.get_file_names()
-        self.dataset_size = len(files)
-        string_labels = self.get_classes_from_file_names(files)
-        int_labels, self.label_lookup_table = self.class_names_to_ids(string_labels)
-        labels = self.convert_to_input_producer(int_labels)
 
         full_file_path = self.convert_to_string_input_producer(self.get_full_path_file_names(files))
-        input_id = self.convert_to_input_producer(range(0, self.dataset_size))
-        speaker_id = self.convert_to_string_input_producer(self.get_speaker_ids(files))
 
         # (AUDIO_SAMPLE_RATE * 1) because we want 1 second samples.
-        raw_data = self.decode_wav_queue(full_file_path, AUDIO_SAMPLE_RATE * 1)
+        full_file_name, raw_data = self.decode_wav_queue(full_file_path, AUDIO_SAMPLE_RATE * 1)
+        string_parts = tf.string_split(full_file_name, '/')
+        file_name = string_parts[-1]
+        string_label = string_parts[-2]
 
         if split == "training":
             background_noise = self.get_background_noise()
@@ -50,21 +49,21 @@ class Dataset:
             AUDIO_SAMPLE_RATE,
             dct_coefficient_count=DTC_COEFFICIENT_COUNT)
 
-        mfcc_queue = tf.train.input_producer(tf.expand_dims(mfcc, axis=-1))
-        background_noise_queue = tf.train.input_producer(tf.expand_dims(background_noise, axis=0))
-        raw_data_queue = tf.train.input_producer(tf.expand_dims(raw_data, axis=0))
-        noisy_data_queue = tf.train.input_producer(tf.expand_dims(noisy_data, axis=0))
 
         self.inputs, self.input_ids, self.labels, self.speaker_ids, \
-        self.background_noise, self.raw_data, self.noisy_data \
-            = tf.train.shuffle_batch([mfcc_queue.dequeue(), input_id.dequeue(), labels.dequeue(), speaker_id.dequeue(),
-                                      background_noise_queue.dequeue(), raw_data_queue.dequeue(),
-                                      noisy_data_queue.dequeue()],
-                                     shapes=((98, 40, 1), (), (), (), (16000, 1), (16000, 1), (16000, 1)),
-                                     batch_size=self.batch_size,
-                                     min_after_dequeue=self.batch_size * 4,
-                                     num_threads=1,
-                                     capacity=self.dataset_size)
+        self.background_noise, self.raw_data, self.noisy_data, self.files \
+            = tf.train.batch([mfcc, input_id.dequeue(), labels.dequeue(), speaker_id.dequeue(),
+                              background_noise_queue.dequeue(), raw_data_queue.dequeue(),
+                              noisy_data_queue.dequeue(), file_queue.dequeue()],
+                             shapes=((98, 40, 1), (), (), (), (16000, 1), (16000, 1), (16000, 1), ()),
+                             batch_size=self.batch_size,
+                             num_threads=1,
+                             capacity=self.dataset_size)
+        with tf.device("/cpu:0"):
+            tf.summary.audio("raw_data", self.raw_data, sample_rate=16000)
+            # tf.summary.text("label", tf.cast(self.labels, dtype=tf.string))
+            tf.summary.audio("noisy_data", self.noisy_data, sample_rate=16000)
+            tf.summary.text("file name", self.files)
 
     def get_file_names(self):
         with open(self.file_list) as f:
@@ -94,9 +93,9 @@ class Dataset:
     @staticmethod
     def decode_wav_queue(file_path, num_samples=-1):
         reader = tf.WholeFileReader()
-        key, wav_file = reader.read(file_path)
+        file_name, wav_file = reader.read(file_path)
         raw_audio, samples = audio_ops.decode_wav(wav_file, desired_channels=1, desired_samples=num_samples)
-        return raw_audio
+        return file_name, raw_audio
 
     @staticmethod
     def decode_wav_file(file_path):
