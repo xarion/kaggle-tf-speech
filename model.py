@@ -41,7 +41,7 @@ class Model:
             cost = []
             for weight in self.blocks.weights:
                 cost.append(tf.nn.l2_loss(weight))
-            decay = 0.0003 * tf.reduce_sum(cost)
+            decay = 0.0001 * tf.reduce_sum(cost)
 
         with tf.variable_scope("all_losses"):
             self.loss = self.classification_loss + decay
