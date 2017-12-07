@@ -4,10 +4,12 @@ from tensorflow.contrib.framework.python.ops import audio_ops
 from tensorflow.python.ops import control_flow_ops
 
 DATA_DIR = "/home/erdi/dev/data/train/"
-TRAINING_LIST = "training_list.txt"
+TRAINING_LIST = "balanced_training_list.txt"
 VALIDATION_LIST = "validation_list.txt"
 TEST_LIST = "test_list.txt"
-DATASET_SPLITS = {"training": TRAINING_LIST, "validation": VALIDATION_LIST, "test": TEST_LIST}
+SUBMISSION_LIST = "submission_list.txt"
+DATASET_SPLITS = {"training": TRAINING_LIST, "validation": VALIDATION_LIST, "test": TEST_LIST,
+                  "submission": SUBMISSION_LIST}
 AUDIO_DIR = DATA_DIR + 'audio/'
 AUDIO_SAMPLE_RATE = 16000
 SPECTOGRAM_WINDOW_SIZE = 480
@@ -19,18 +21,15 @@ class Dataset:
     def __init__(self, split, batch_size):
         self.file_list = DATASET_SPLITS[split]
         self.batch_size = batch_size
-        files = self.get_file_names()
-        self.dataset_size = len(files)
-        string_labels = self.get_classes_from_file_names(files)
-        int_labels, self.label_lookup_table = self.class_names_to_ids(string_labels)
-        labels = self.convert_to_input_producer(int_labels)
+        self.create_label_lookup_table()
 
-        full_file_path = self.convert_to_string_input_producer(self.get_full_path_file_names(files))
-        input_id = self.convert_to_input_producer(range(0, self.dataset_size))
-        speaker_id = self.convert_to_string_input_producer(self.get_speaker_ids(files))
+        random_selector_variable = tf.random_uniform([], minval=0, maxval=1, dtype=tf.float32)
+        silent_data, silent_labels = self.get_silent_records()
+        labeled_data, labeled_labels = self.get_labeled_records()
 
-        # (AUDIO_SAMPLE_RATE * 1) because we want 1 second samples.
-        raw_data = self.decode_wav_queue(full_file_path, AUDIO_SAMPLE_RATE * 1)
+        raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
+                                     true_fn=lambda: (silent_data, silent_labels),
+                                     false_fn=lambda: (labeled_data, labeled_labels))
 
         if split == "training":
             background_noise = self.get_background_noise()
@@ -49,22 +48,38 @@ class Dataset:
             spectrogram,
             AUDIO_SAMPLE_RATE,
             dct_coefficient_count=DTC_COEFFICIENT_COUNT)
+        mfcc = tf.expand_dims(mfcc, -1)
 
-        mfcc_queue = tf.train.input_producer(tf.expand_dims(mfcc, axis=-1))
-        background_noise_queue = tf.train.input_producer(tf.expand_dims(background_noise, axis=0))
-        raw_data_queue = tf.train.input_producer(tf.expand_dims(raw_data, axis=0))
-        noisy_data_queue = tf.train.input_producer(tf.expand_dims(noisy_data, axis=0))
+        self.inputs, self.labels, self.background_noise, self.raw_data, self.noisy_data = \
+            tf.train.shuffle_batch([mfcc, label_id, background_noise, raw_data, noisy_data],
+                                   shapes=((1, 98, 40, 1), (), (16000, 1), (16000, 1), (16000, 1)),
+                                   batch_size=self.batch_size,
+                                   num_threads=4,
+                                   capacity=batch_size * 10,
+                                   min_after_dequeue=batch_size * 8)
+        tf.summary.audio("raw_data", self.raw_data, sample_rate=16000)
+        # tf.summary.text("label", tf.cast(self.labels, dtype=tf.string))
+        tf.summary.audio("noisy_data", self.noisy_data, sample_rate=16000)
 
-        self.inputs, self.input_ids, self.labels, self.speaker_ids, \
-        self.background_noise, self.raw_data, self.noisy_data \
-            = tf.train.shuffle_batch([mfcc_queue.dequeue(), input_id.dequeue(), labels.dequeue(), speaker_id.dequeue(),
-                                      background_noise_queue.dequeue(), raw_data_queue.dequeue(),
-                                      noisy_data_queue.dequeue()],
-                                     shapes=((98, 40, 1), (), (), (), (16000, 1), (16000, 1), (16000, 1)),
-                                     batch_size=self.batch_size,
-                                     min_after_dequeue=self.batch_size * 4,
-                                     num_threads=1,
-                                     capacity=self.dataset_size)
+    def get_labeled_records(self):
+        with tf.variable_scope("labeled_records"):
+            files = self.get_file_names()
+            full_file_path = self.convert_to_string_input_producer(self.get_full_path_file_names(files))
+
+            # (AUDIO_SAMPLE_RATE * 1) because we want 1 second samples.
+            full_file_name, raw_data = self.decode_wav_queue(full_file_path, AUDIO_SAMPLE_RATE * 1)
+
+            string_parts = tf.string_split([full_file_name], '/').values
+            # file_name = string_parts[-1]
+            # speaker_id = tf.string_split([file_name], '_').values[0]
+            label_name = string_parts[-2]
+            label_id = self.label_lookup_table.lookup(label_name)
+
+            return raw_data, label_id
+
+    def get_silent_records(self):
+        with tf.variable_scope("silent_records"):
+            return self.get_background_noise(), tf.constant(self.competition_labels_to_ids["silence"])
 
     def get_file_names(self):
         with open(self.file_list) as f:
@@ -94,9 +109,11 @@ class Dataset:
     @staticmethod
     def decode_wav_queue(file_path, num_samples=-1):
         reader = tf.WholeFileReader()
-        key, wav_file = reader.read(file_path)
+        file_name, wav_file = reader.read(file_path)
+
         raw_audio, samples = audio_ops.decode_wav(wav_file, desired_channels=1, desired_samples=num_samples)
-        return raw_audio
+
+        return file_name, raw_audio
 
     @staticmethod
     def decode_wav_file(file_path):
@@ -142,3 +159,24 @@ class Dataset:
         background_multiplier = tf.random_uniform([], minval=0, maxval=0.1, dtype=tf.float32)
         background_noise = background_sample * background_multiplier
         return background_noise
+
+    def create_label_lookup_table(self):
+        import dataset_labels
+
+        items = dataset_labels.dataset_labels_to_competition_ids.items()
+
+        keys, values = zip(*items)
+
+        table = tf.contrib.lookup.HashTable(
+            tf.contrib.lookup.KeyValueTensorInitializer(keys, values), -1
+        )
+
+        # initialize it now
+        table.init.run()
+
+        self.label_lookup_table = table
+        self.competition_labels = dataset_labels.competition_labels
+        self.competition_labels_to_ids = dataset_labels.competition_labels_to_ids
+        self.dataset_labels = dataset_labels.dataset_labels
+        self.label_lookup_dict = dataset_labels.dataset_labels_to_competition_ids
+        self.number_of_labels = len(dataset_labels.competition_labels)
