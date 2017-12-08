@@ -53,7 +53,7 @@ with tf.Session() as sess:
                 m, accuracy, confusion_matrix = sess.run([merged, model.accuracy, model.confusion_matrix], feed_dict={data.do_validate: True})
                 validation_writer.add_summary(m)
                 tf.logging.info("===== validation accuracy accuracy %.2f =====" % (accuracy))
-                tf.logging.info(confusion_matrix)
+                tf.logging.info("\n" + confusion_matrix)
 
     except tf.errors.OutOfRangeError:
         tf.logging.info('Done training -- epoch limit reached')
