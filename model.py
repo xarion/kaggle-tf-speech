@@ -63,7 +63,7 @@ class Model:
             tf.summary.scalar("accuracy", self.accuracy)
 
         with tf.variable_scope('classification_gradient'):
-            boundaries = [7000, 3000]
+            boundaries = [7000, 10000]
             values = [0.001, 0.0001, 0.00001]
 
             self.global_step = tf.Variable(0, name='global_step', trainable=False)
