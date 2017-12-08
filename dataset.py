@@ -182,6 +182,7 @@ class Dataset:
         num_cases = len(files)
 
         background_files = map(self.decode_wav_file, files)
+        background_files.append(tf.zeros([num_samples, 1], dtype=tf.float32))
         # background_files = tf.convert_to_tensor(files)
 
         sel = tf.random_uniform([], maxval=num_cases, dtype=tf.int32)

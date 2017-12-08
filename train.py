@@ -32,7 +32,7 @@ with tf.Session() as sess:
     step = 0
     last_step = 0
     try:
-        while not coord.should_stop() and not (step >= 15000):
+        while not coord.should_stop() and not (step >= 11000):
             m, _, loss, step, labels, accuracy, = sess.run([merged,
                                                             model.training_step,
                                                             model.loss,

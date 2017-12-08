@@ -77,3 +77,8 @@ class Blocks:
 
     def add_bias(self, layer):
         return tf.contrib.layers.bias_add(layer)
+
+    def reduce_var(self, x, axis=None, keepdims=False):
+        m = tf.reduce_mean(x, axis=axis, keep_dims=True)
+        devs_squared = tf.square(x - m)
+        return tf.reduce_mean(devs_squared, axis=axis, keep_dims=keepdims)

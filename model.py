@@ -31,10 +31,15 @@ class Model:
             conv_3 = self.blocks.normalized_relu_activation(conv_3)
             conv_3_max_pool = tf.nn.max_pool(conv_3, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
             conv_3_avg_pool = tf.nn.avg_pool(conv_3, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
+            conv_3_global_average = tf.reduce_mean(conv_3, axis=[1, 2])
+            conv_3_global_variance = self.blocks.reduce_var(conv_3, axis=[1, 2])
+
             conv_3 = tf.concat([conv_3_max_pool, conv_3_avg_pool], 3)
+            conv_3 = tf.reshape(conv_3, [-1, 15360 * 2])
+            conv_3 = tf.concat([conv_3, conv_3_global_average, conv_3_global_variance], 1)
 
         with tf.variable_scope("fc"):
-            final_fc = self.blocks.fc(conv_3, 15360*2, data.number_of_labels)
+            final_fc = self.blocks.fc(conv_3, 15360 * 2 + 256 + 256, data.number_of_labels)
 
         with tf.variable_scope("accuracy"):
             self.logits = final_fc
@@ -58,7 +63,7 @@ class Model:
             tf.summary.scalar("accuracy", self.accuracy)
 
         with tf.variable_scope('classification_gradient'):
-            boundaries = [10000, 13000]
+            boundaries = [7000, 3000]
             values = [0.001, 0.0001, 0.00001]
 
             self.global_step = tf.Variable(0, name='global_step', trainable=False)
