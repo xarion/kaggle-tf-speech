@@ -45,8 +45,10 @@ class Model:
             self.logits = final_fc
             self.prediction = tf.cast(tf.argmax(self.logits, axis=1), tf.int32)
             self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.labels, self.prediction), dtype=tf.float32))
-            classification_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits,
-                                                                                 labels=self.labels)
+            dense_labels = tf.one_hot(self.labels, 12, on_value=0.9, off_value=0.0091)
+            classification_loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.logits,
+                                                                          labels=dense_labels)
+
             self.classification_loss = tf.reduce_mean(classification_loss)
 
         with tf.variable_scope("confusion_matrix"):
