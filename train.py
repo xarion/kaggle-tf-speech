@@ -6,13 +6,15 @@ from model import Model
 CHECKPOINT_STEP = 1000
 CHECKPOINT_FOLDER = "checkpoints"
 CHECKPOINT_NAME = "model"
+VALIDATION_STEP = 500
 tf.logging.set_verbosity(tf.logging.INFO)
 
 with tf.Session() as sess:
-    data = Dataset(split="training", batch_size=128)
+    data = SplittingDataset(training_batch_size=128, validation_batch_size=512)
     model = Model(data=data)
 
     train_writer = tf.summary.FileWriter("summaries/train", sess.graph)
+    validation_writer = tf.summary.FileWriter("summaries/validation", sess.graph)
     merged = tf.summary.merge_all()
 
     saver = tf.train.Saver(max_to_keep=6, keep_checkpoint_every_n_hours=3)
@@ -33,6 +35,7 @@ with tf.Session() as sess:
     last_step = 0
     try:
         while not coord.should_stop() and not (step >= 11000):
+            # Train the model
             m, _, loss, step, labels, accuracy, = sess.run([merged,
                                                             model.training_step,
                                                             model.loss,
@@ -44,12 +47,22 @@ with tf.Session() as sess:
             if step % CHECKPOINT_STEP == 0:
                 saver.save(sess, CHECKPOINT_FOLDER + '/' + CHECKPOINT_NAME, global_step=step)
             last_step = step
+
+            # Do Validation sometimes
+            if last_step % VALIDATION_STEP == 0:
+                m, accuracy = sess.run([merged, model.accuracy], feed_dict={data.do_validate: True})
+                validation_writer.add_summary(m)
+                tf.logging.info("===== validation accuracy accuracy %.2f =====" % (accuracy))
+            last_step = step
+
     except tf.errors.OutOfRangeError:
         tf.logging.info('Done training -- epoch limit reached')
     finally:
         if last_step:
             saver.save(sess, CHECKPOINT_FOLDER + '/' + CHECKPOINT_NAME, global_step=last_step)
 
+    validation_writer.flush()
+    validation_writer.close()
     train_writer.flush()
     train_writer.close()
     coord.request_stop()
