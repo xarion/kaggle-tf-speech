@@ -40,7 +40,7 @@ class Dataset:
                 silent_data, silent_labels = self.get_silent_records()
                 labeled_data, labeled_labels = self.get_labeled_records()
 
-                raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
+                raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 20.)),
                                              true_fn=lambda: (silent_data, silent_labels),
                                              false_fn=lambda: (labeled_data, labeled_labels))
 
