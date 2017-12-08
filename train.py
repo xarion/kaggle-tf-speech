@@ -6,11 +6,11 @@ from model import Model
 CHECKPOINT_STEP = 1000
 CHECKPOINT_FOLDER = "checkpoints"
 CHECKPOINT_NAME = "model"
-VALIDATION_STEP = 500
+VALIDATION_STEP = 100
 tf.logging.set_verbosity(tf.logging.INFO)
 
 with tf.Session() as sess:
-    data = SplittingDataset(training_batch_size=128, validation_batch_size=512)
+    data = SplittingDataset(training_batch_size=128, validation_batch_size=256)
     model = Model(data=data)
 
     train_writer = tf.summary.FileWriter("summaries/train", sess.graph)
@@ -54,7 +54,6 @@ with tf.Session() as sess:
                 validation_writer.add_summary(m)
                 tf.logging.info("===== validation accuracy accuracy %.2f =====" % (accuracy))
                 tf.logging.info(confusion_matrix)
-            last_step = step
 
     except tf.errors.OutOfRangeError:
         tf.logging.info('Done training -- epoch limit reached')
