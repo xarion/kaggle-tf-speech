@@ -50,9 +50,10 @@ with tf.Session() as sess:
 
             # Do Validation sometimes
             if last_step % VALIDATION_STEP == 0:
-                m, accuracy = sess.run([merged, model.accuracy], feed_dict={data.do_validate: True})
+                m, accuracy, confusion_matrix = sess.run([merged, model.accuracy, model.confusion_matrix], feed_dict={data.do_validate: True})
                 validation_writer.add_summary(m)
                 tf.logging.info("===== validation accuracy accuracy %.2f =====" % (accuracy))
+                tf.logging.info(confusion_matrix)
             last_step = step
 
     except tf.errors.OutOfRangeError:

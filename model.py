@@ -49,6 +49,9 @@ class Model:
                                                                                  labels=self.labels)
             self.classification_loss = tf.reduce_mean(classification_loss)
 
+        with tf.variable_scope("confusion_matrix"):
+            self.confusion_matrix = tf.confusion_matrix(self.labels, self.prediction)
+
         with tf.variable_scope("decay"):
             cost = []
             for weight in self.blocks.weights:
