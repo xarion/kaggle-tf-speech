@@ -15,17 +15,24 @@ with tf.Session() as sess:
     train_writer = tf.summary.FileWriter("summaries/train", sess.graph)
     merged = tf.summary.merge_all()
 
-    saver = tf.train.Saver(max_to_keep=3, keep_checkpoint_every_n_hours=3)
+    saver = tf.train.Saver(max_to_keep=6, keep_checkpoint_every_n_hours=3)
 
     sess.run(tf.variables_initializer(tf.global_variables()))
     sess.run(tf.variables_initializer(tf.local_variables()))
+
+    latest_checkpoint = tf.train.latest_checkpoint(CHECKPOINT_FOLDER)
+    if latest_checkpoint:
+        tf.logging.info("loading from checkpoint file: " + latest_checkpoint)
+        saver.restore(sess, latest_checkpoint)
+    else:
+        tf.logging.info("checkpoint not found")
 
     coord = tf.train.Coordinator()
     queueRunners = tf.train.start_queue_runners(sess=sess, coord=coord)
     step = 0
     last_step = 0
     try:
-        while not coord.should_stop():
+        while not coord.should_stop() and not (step >= 15000):
             m, _, loss, step, labels, accuracy, = sess.run([merged,
                                                             model.training_step,
                                                             model.loss,

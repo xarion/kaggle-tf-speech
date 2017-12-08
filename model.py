@@ -7,6 +7,7 @@ class Model:
     def __init__(self, data):
         self.input = data.inputs
         self.labels = data.labels
+        self.input_file_names = data.file_names
         self.blocks = Blocks()
 
         self.input = tf.reshape(self.input, [-1, 98, 40, 1])
@@ -14,25 +15,31 @@ class Model:
         with tf.variable_scope("conv_1"):
             conv_1 = self.blocks.conv2d(self.input, [8, 20, 1, 64])
             conv_1 = self.blocks.normalized_relu_activation(conv_1)
-            conv_1 = tf.nn.max_pool(conv_1, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
+            conv_1_max_pool = tf.nn.max_pool(conv_1, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
+            conv_1_avg_pool = tf.nn.avg_pool(conv_1, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
+            conv_1 = tf.concat([conv_1_max_pool, conv_1_avg_pool], 3)
 
         with tf.variable_scope("conv_2"):
-            conv_2 = self.blocks.conv2d(conv_1, [4, 10, 64, 128])
+            conv_2 = self.blocks.conv2d(conv_1, [4, 10, 128, 128])
             conv_2 = self.blocks.normalized_relu_activation(conv_2)
-            conv_2 = tf.nn.max_pool(conv_2, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
+            conv_2_max_pool = tf.nn.max_pool(conv_2, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
+            conv_2_avg_pool = tf.nn.avg_pool(conv_2, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
+            conv_2 = tf.concat([conv_2_max_pool, conv_2_avg_pool], 3)
 
         with tf.variable_scope("conv_3"):
-            conv_3 = self.blocks.conv2d(conv_2, [2, 5, 128, 256])
+            conv_3 = self.blocks.conv2d(conv_2, [2, 5, 256, 256])
             conv_3 = self.blocks.normalized_relu_activation(conv_3)
-            conv_3 = tf.nn.max_pool(conv_3, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
+            conv_3_max_pool = tf.nn.max_pool(conv_3, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
+            conv_3_avg_pool = tf.nn.avg_pool(conv_3, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
+            conv_3 = tf.concat([conv_3_max_pool, conv_3_avg_pool], 3)
 
         with tf.variable_scope("fc"):
-            final_fc = self.blocks.fc(conv_3, 15360, data.number_of_labels)
+            final_fc = self.blocks.fc(conv_3, 15360*2, data.number_of_labels)
 
         with tf.variable_scope("accuracy"):
             self.logits = final_fc
-            prediction = tf.cast(tf.argmax(self.logits, axis=1), tf.int32)
-            self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.labels, prediction), dtype=tf.float32))
+            self.prediction = tf.cast(tf.argmax(self.logits, axis=1), tf.int32)
+            self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.labels, self.prediction), dtype=tf.float32))
             classification_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits,
                                                                                  labels=self.labels)
             self.classification_loss = tf.reduce_mean(classification_loss)
@@ -41,7 +48,7 @@ class Model:
             cost = []
             for weight in self.blocks.weights:
                 cost.append(tf.nn.l2_loss(weight))
-            decay = 0.0001 * tf.reduce_sum(cost)
+            decay = 0.0003 * tf.reduce_sum(cost)
 
         with tf.variable_scope("all_losses"):
             self.loss = self.classification_loss + decay
@@ -51,7 +58,7 @@ class Model:
             tf.summary.scalar("accuracy", self.accuracy)
 
         with tf.variable_scope('classification_gradient'):
-            boundaries = [15000, 18000]
+            boundaries = [10000, 13000]
             values = [0.001, 0.0001, 0.00001]
 
             self.global_step = tf.Variable(0, name='global_step', trainable=False)
