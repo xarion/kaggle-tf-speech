@@ -72,14 +72,15 @@ class Dataset:
         elif split == "validation":
             with tf.device("/cpu:0"):
                 raw_data, label_id = self.get_labeled_records()
-                mfcc = self.wav_to_mfcc(raw_data)
-                self.inputs, self.labels = tf.train.shuffle_batch([mfcc, label_id],
-                                                                  shapes=((1, 98, 40, 1), ()),
-                                                                  batch_size=self.batch_size,
-                                                                  num_threads=4,
-                                                                  capacity=batch_size * 2,
-                                                                  min_after_dequeue=batch_size)
-                self.file_names = tf.placeholder(dtype=tf.string, name="file_names_are_not_set_in_the_training_dataset")
+                
+            mfcc = self.wav_to_mfcc(raw_data)
+            self.inputs, self.labels = tf.train.shuffle_batch([mfcc, label_id],
+                                                              shapes=((1, 98, 40, 1), ()),
+                                                              batch_size=self.batch_size,
+                                                              num_threads=12,
+                                                              capacity=batch_size * 2,
+                                                              min_after_dequeue=batch_size)
+            self.file_names = tf.placeholder(dtype=tf.string, name="file_names_are_not_set_in_the_training_dataset")
 
     @staticmethod
     def wav_to_mfcc(raw_data):
