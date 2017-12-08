@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from dataset import Dataset
+from data.splitting_dataset import SplittingDataset
 from model import Model
 
 CHECKPOINT_STEP = 1000

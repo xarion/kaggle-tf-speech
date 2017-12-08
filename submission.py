@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from dataset import Dataset
+from data.dataset import Dataset
 from model import Model
 from submission_writer import SubmissionWriter
 
