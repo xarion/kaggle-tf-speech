@@ -10,7 +10,7 @@ DATA_DIRS = {"training": TRAINING_DATA_DIR,
              "test": TRAINING_DATA_DIR,
              "submission": SUBMISSION_DATA_DIR}
 TRAINING_LIST = "balanced_training_list.txt"
-VALIDATION_LIST = "validation_list.txt"
+VALIDATION_LIST = "balanced_validation_list.txt"
 TEST_LIST = "test_list.txt"
 SUBMISSION_LIST = "submission_list.txt"
 DATASET_SPLITS = {"training": TRAINING_LIST, "validation": VALIDATION_LIST, "test": TEST_LIST,
