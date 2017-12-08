@@ -11,6 +11,15 @@ DATA_DIRS = {"training": TRAINING_DATA_DIR,
              "submission": SUBMISSION_DATA_DIR}
 TRAINING_LIST = "balanced_training_list.txt"
 VALIDATION_LIST = "balanced_validation_list.txt"
+
+TRAINING_BACKGROUND_NOISES = ["_background_noise_/doing_the_dishes.wav",
+                              "_background_noise_/pink_noise.wav",
+                              "_background_noise_/running_tap.wav",
+                              "_background_noise_/white_noise.wav"]
+
+VALIDATION_BACKGROUND_NOISES = ["_background_noise_/dude_miaowing.wav",
+                                "_background_noise_/exercise_bike.wav"]
+
 TEST_LIST = "test_list.txt"
 SUBMISSION_LIST = "submission_list.txt"
 DATASET_SPLITS = {"training": TRAINING_LIST, "validation": VALIDATION_LIST, "test": TEST_LIST,
@@ -40,7 +49,7 @@ class Dataset:
                 silent_data, silent_labels = self.get_silent_records()
                 labeled_data, labeled_labels = self.get_labeled_records()
 
-                raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 20.)),
+                raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
                                              true_fn=lambda: (silent_data, silent_labels),
                                              false_fn=lambda: (labeled_data, labeled_labels))
 
@@ -71,7 +80,13 @@ class Dataset:
             self.labels = tf.placeholder(dtype=tf.int32, name="labels_are_not_set_in_the_submission_dataset")
         elif split == "validation":
             with tf.device("/cpu:0"):
-                raw_data, label_id = self.get_labeled_records()
+                random_selector_variable = tf.random_uniform([], minval=0, maxval=1, dtype=tf.float32)
+                silent_data, silent_labels = self.get_silent_records()
+                labeled_data, labeled_labels = self.get_labeled_records()
+
+                raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
+                                             true_fn=lambda: (silent_data, silent_labels),
+                                             false_fn=lambda: (labeled_data, labeled_labels))
 
                 mfcc = self.wav_to_mfcc(raw_data)
                 self.inputs, self.labels = tf.train.shuffle_batch([mfcc, label_id],
@@ -183,12 +198,8 @@ class Dataset:
 
     def get_random_background_noise(self, num_samples):
 
-        files = [TRAINING_DATA_DIR + "_background_noise_/doing_the_dishes.wav",
-                 TRAINING_DATA_DIR + "_background_noise_/dude_miaowing.wav",
-                 TRAINING_DATA_DIR + "_background_noise_/exercise_bike.wav",
-                 TRAINING_DATA_DIR + "_background_noise_/pink_noise.wav",
-                 TRAINING_DATA_DIR + "_background_noise_/running_tap.wav",
-                 TRAINING_DATA_DIR + "_background_noise_/white_noise.wav"]
+        files = TRAINING_BACKGROUND_NOISES if self.split == "training" else VALIDATION_BACKGROUND_NOISES
+        files = map(lambda file: TRAINING_DATA_DIR + file, files)
         num_cases = len(files)
 
         background_files = map(self.decode_wav_file, files)
