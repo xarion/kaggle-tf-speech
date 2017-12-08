@@ -35,7 +35,6 @@ class Dataset:
         # Placeholders will throw an error if they need to be used out of context! so watch out for those errors
 
         if split == "training":
-
             with tf.device("/cpu:0"):
                 random_selector_variable = tf.random_uniform([], minval=0, maxval=1, dtype=tf.float32)
                 silent_data, silent_labels = self.get_silent_records()
@@ -70,6 +69,17 @@ class Dataset:
                                                           capacity=batch_size * 10,
                                                           allow_smaller_final_batch=True)
             self.labels = tf.placeholder(dtype=tf.int32, name="labels_are_not_set_in_the_submission_dataset")
+        elif split == "validation":
+            with tf.device("/cpu:0"):
+                raw_data, label_id = self.get_labeled_records()
+                mfcc = self.wav_to_mfcc(raw_data)
+                self.inputs, self.labels = tf.train.shuffle_batch([mfcc, label_id],
+                                                                  shapes=((1, 98, 40, 1), ()),
+                                                                  batch_size=self.batch_size,
+                                                                  num_threads=32,
+                                                                  capacity=batch_size * 20,
+                                                                  min_after_dequeue=batch_size * 16)
+                self.file_names = tf.placeholder(dtype=tf.string, name="file_names_are_not_set_in_the_training_dataset")
 
     @staticmethod
     def wav_to_mfcc(raw_data):
@@ -134,7 +144,6 @@ class Dataset:
 
     def get_full_path_file_names(self, files):
         return map(lambda name: self.audio_dir + name, files)
-
 
     @staticmethod
     def get_speaker_ids(files):
