@@ -18,10 +18,10 @@ class Blocks:
         self.weights.append(w)
         return w
 
-    def conv2d(self, input_layer, filter_shape, stride=1, dilation=1):
+    def conv2d(self, input_layer, filter_shape, stride=1, dilation=1, padding="SAME"):
         with tf.variable_scope("conv2d"):
             _filter = self.create_weights("filter_weights", filter_shape)
-            return tf.nn.convolution(input_layer, _filter, strides=[stride, stride], padding="SAME",
+            return tf.nn.convolution(input_layer, _filter, strides=[stride, stride], padding=padding,
                                      dilation_rate=[dilation, dilation])
 
     def relu_conv2d(self, input_layer, filter_shape, stride=1, mcrelu=False):

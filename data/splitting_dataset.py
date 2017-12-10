@@ -5,11 +5,11 @@ import tensorflow as tf
 # This may extend the Dataset itself for some functionality. it's fine.
 class SplittingDataset():
 
-    def __init__(self, training_batch_size=128, validation_batch_size=512):
-        training_dataset = Dataset(split="training", batch_size=128)
-        validation_dataset = Dataset(split="validation", batch_size=512)
+    def __init__(self, training_batch_size, validation_batch_size, mfcc):
+        training_dataset = Dataset(split="training", batch_size=training_batch_size)
+        validation_dataset = Dataset(split="validation", batch_size=validation_batch_size)
         self.do_validate = tf.placeholder_with_default(False, ())
         self.inputs, self.labels, self.file_names = tf.cond(self.do_validate,
-                lambda: (validation_dataset.inputs, validation_dataset.labels, validation_dataset.file_names),
-                lambda: (training_dataset.inputs, training_dataset.labels, training_dataset.file_names))
+                                                            lambda: validation_dataset.input_set,
+                                                            lambda: training_dataset.input_set)
         self.number_of_labels = training_dataset.number_of_labels

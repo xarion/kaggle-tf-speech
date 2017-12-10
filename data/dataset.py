@@ -3,6 +3,8 @@ import numpy as np
 from tensorflow.contrib.framework.python.ops import audio_ops
 from tensorflow.python.ops import control_flow_ops
 
+from flags import FLAGS
+
 TRAINING_DATA_DIR = "/home/erdi/dev/data/train/audio/"
 SUBMISSION_DATA_DIR = "/home/erdi/dev/data/test/audio/"
 DATA_DIRS = {"training": TRAINING_DATA_DIR,
@@ -25,10 +27,10 @@ SUBMISSION_LIST = "submission_list.txt"
 DATASET_SPLITS = {"training": TRAINING_LIST, "validation": VALIDATION_LIST, "test": TEST_LIST,
                   "submission": SUBMISSION_LIST}
 
-AUDIO_SAMPLE_RATE = 16000
-SPECTOGRAM_WINDOW_SIZE = 480
-SPECTOGRAM_STRIDE = 160
-DTC_COEFFICIENT_COUNT = 40
+AUDIO_SAMPLE_RATE = FLAGS.audio_sample_rate
+SPECTOGRAM_WINDOW_SIZE = FLAGS.spectogram_window_size
+SPECTOGRAM_STRIDE = FLAGS.spectogram_stride
+DTC_COEFFICIENT_COUNT = FLAGS.dtc_coefficient_count
 
 
 class Dataset:
@@ -37,65 +39,103 @@ class Dataset:
         self.audio_dir = DATA_DIRS[self.split]
         self.file_list = DATASET_SPLITS[split]
         self.batch_size = batch_size
-        self.create_label_lookup_table()
+        self.label_lookup_table, self.dataset_labels = self.create_label_lookup_table()
+
+        self.competition_labels = self.dataset_labels.competition_labels
+        self.competition_labels_to_ids = self.dataset_labels.competition_labels_to_ids
+        self.dataset_labels = self.dataset_labels.dataset_labels
+        self.label_lookup_dict = self.dataset_labels.dataset_labels_to_competition_ids
+        self.number_of_labels = len(self.dataset_labels.competition_labels)
+
+        self.mfcc_inputs = FLAGS.mfcc_inputs
+
+        if self.mfcc_inputs:
+            self.input_dimensions = (1, AUDIO_SAMPLE_RATE / SPECTOGRAM_STRIDE - 2, DTC_COEFFICIENT_COUNT, 1)
+        else:
+            self.input_dimensions = (1, AUDIO_SAMPLE_RATE, 1, 1)
 
         # all sets self.inputs, self.file_names, self.labels
         # The model should be careful in what it is using, because some may be placeholders.
         # Placeholders will throw an error if they need to be used out of context! so watch out for those errors
 
         if split == "training":
-            with tf.device("/cpu:0"):
-                random_selector_variable = tf.random_uniform([], minval=0, maxval=1, dtype=tf.float32)
-                silent_data, silent_labels = self.get_silent_records()
-                labeled_data, labeled_labels = self.get_labeled_records()
-
-                raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
-                                             true_fn=lambda: (silent_data, silent_labels),
-                                             false_fn=lambda: (labeled_data, labeled_labels))
-
-                background_noise = self.get_background_noise()
-                noisy_data = raw_data + background_noise
-                noisy_data = tf.clip_by_value(noisy_data, -1.0, 1.0)
-
-                mfcc = self.wav_to_mfcc(noisy_data)
-                self.inputs, self.labels = tf.train.shuffle_batch([mfcc, label_id],
-                                                                  shapes=((1, 98, 40, 1), ()),
-                                                                  batch_size=self.batch_size,
-                                                                  num_threads=32,
-                                                                  capacity=batch_size * 20,
-                                                                  min_after_dequeue=batch_size * 16)
-                self.file_names = tf.placeholder(dtype=tf.string, name="file_names_are_not_set_in_the_training_dataset")
+            self.input_set = self.create_training_dataset()
 
         elif split == "submission":
-            with tf.device("/cpu:0"):
-                raw_data, file_name = self.get_records(num_epochs=1)
+            self.input_set = self.create_submission_inputs()
 
-            mfcc = self.wav_to_mfcc(raw_data)
-            self.inputs, self.file_names = tf.train.batch([mfcc, file_name],
-                                                          shapes=((1, 98, 40, 1), ()),
-                                                          batch_size=self.batch_size,
-                                                          num_threads=48,
-                                                          capacity=batch_size * 10,
-                                                          allow_smaller_final_batch=True)
-            self.labels = tf.placeholder(dtype=tf.int32, name="labels_are_not_set_in_the_submission_dataset")
         elif split == "validation":
-            with tf.device("/cpu:0"):
-                random_selector_variable = tf.random_uniform([], minval=0, maxval=1, dtype=tf.float32)
-                silent_data, silent_labels = self.get_silent_records()
-                labeled_data, labeled_labels = self.get_labeled_records()
+            self.input_set = self.create_validation_inputs()
 
-                raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
-                                             true_fn=lambda: (silent_data, silent_labels),
-                                             false_fn=lambda: (labeled_data, labeled_labels))
+    def create_validation_inputs(self):
+        with tf.device("/cpu:0"):
+            random_selector_variable = tf.random_uniform([], minval=0, maxval=1, dtype=tf.float32)
+            silent_data, silent_labels = self.get_silent_records()
+            labeled_data, labeled_labels = self.get_labeled_records()
 
-                mfcc = self.wav_to_mfcc(raw_data)
-                self.inputs, self.labels = tf.train.shuffle_batch([mfcc, label_id],
-                                                                  shapes=((1, 98, 40, 1), ()),
-                                                                  batch_size=self.batch_size,
-                                                                  num_threads=12,
-                                                                  capacity=batch_size * 2,
-                                                                  min_after_dequeue=batch_size)
-                self.file_names = tf.placeholder(dtype=tf.string, name="file_names_are_not_set_in_the_training_dataset")
+            raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
+                                         true_fn=lambda: (silent_data, silent_labels),
+                                         false_fn=lambda: (labeled_data, labeled_labels))
+        if self.mfcc_inputs:
+            data = self.wav_to_mfcc(raw_data)
+        else:
+            data = raw_data
+
+        inputs, labels = tf.train.shuffle_batch([data, label_id],
+                                                shapes=(self.input_dimensions, ()),
+                                                batch_size=self.batch_size,
+                                                num_threads=12,
+                                                capacity=self.batch_size * 2,
+                                                min_after_dequeue=self.batch_size)
+        file_names = tf.placeholder(dtype=tf.string, name="file_names_are_not_set_in_the_training_dataset")
+
+        return inputs, labels, file_names
+
+    def create_submission_inputs(self):
+        with tf.device("/cpu:0"):
+            raw_data, file_name = self.get_records(num_epochs=1)
+
+        if self.mfcc_inputs:
+            data = self.wav_to_mfcc(raw_data)
+        else:
+            data = raw_data
+
+        inputs, file_names = tf.train.batch([data, file_name],
+                                            shapes=(self.input_dimensions, ()),
+                                            batch_size=self.batch_size,
+                                            num_threads=48,
+                                            capacity=self.batch_size * 10,
+                                            allow_smaller_final_batch=True)
+        labels = tf.placeholder(dtype=tf.int32, name="labels_are_not_set_in_the_submission_dataset")
+        return inputs, labels, file_names
+
+    def create_training_dataset(self):
+        with tf.device("/cpu:0"):
+            random_selector_variable = tf.random_uniform([], minval=0, maxval=1, dtype=tf.float32)
+            silent_data, silent_labels = self.get_silent_records()
+            labeled_data, labeled_labels = self.get_labeled_records()
+
+            raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
+                                         true_fn=lambda: (silent_data, silent_labels),
+                                         false_fn=lambda: (labeled_data, labeled_labels))
+
+            background_noise = self.get_background_noise()
+            noisy_data = raw_data + background_noise
+            noisy_data = tf.clip_by_value(noisy_data, -1.0, 1.0)
+
+        if self.mfcc_inputs:
+            data = self.wav_to_mfcc(noisy_data)
+        else:
+            data = noisy_data
+
+        inputs, labels = tf.train.shuffle_batch([data, label_id],
+                                                shapes=(self.input_dimensions, ()),
+                                                batch_size=self.batch_size,
+                                                num_threads=32,
+                                                capacity=self.batch_size * 20,
+                                                min_after_dequeue=self.batch_size * 16)
+        file_names = tf.placeholder(dtype=tf.string, name="file_names_are_not_set_in_the_training_dataset")
+        return inputs, labels, file_names
 
     @staticmethod
     def wav_to_mfcc(raw_data):
@@ -199,7 +239,7 @@ class Dataset:
     def get_random_background_noise(self, num_samples):
 
         files = TRAINING_BACKGROUND_NOISES if self.split == "training" else VALIDATION_BACKGROUND_NOISES
-        files = map(lambda file: TRAINING_DATA_DIR + file, files)
+        files = map(lambda file_name: TRAINING_DATA_DIR + file_name, files)
         num_cases = len(files)
 
         background_files = map(self.decode_wav_file, files)
@@ -220,23 +260,16 @@ class Dataset:
         background_noise = background_sample * background_multiplier
         return background_noise
 
-    def create_label_lookup_table(self):
+    @staticmethod
+    def create_label_lookup_table():
         import dataset_labels
 
         items = dataset_labels.dataset_labels_to_competition_ids.items()
-
         keys, values = zip(*items)
 
         table = tf.contrib.lookup.HashTable(
             tf.contrib.lookup.KeyValueTensorInitializer(keys, values), -1
         )
-
-        # initialize it now
         table.init.run()
 
-        self.label_lookup_table = table
-        self.competition_labels = dataset_labels.competition_labels
-        self.competition_labels_to_ids = dataset_labels.competition_labels_to_ids
-        self.dataset_labels = dataset_labels.dataset_labels
-        self.label_lookup_dict = dataset_labels.dataset_labels_to_competition_ids
-        self.number_of_labels = len(dataset_labels.competition_labels)
+        return table, dataset_labels
