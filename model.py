@@ -80,3 +80,4 @@ class Model:
 
             with tf.control_dependencies(update_ops):
                 self.training_step = self.optimizer.minimize(self.loss, global_step=self.global_step)
+

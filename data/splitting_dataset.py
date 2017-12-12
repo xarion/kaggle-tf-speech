@@ -5,7 +5,7 @@ import tensorflow as tf
 # This may extend the Dataset itself for some functionality. it's fine.
 class SplittingDataset():
 
-    def __init__(self, training_batch_size, validation_batch_size, mfcc):
+    def __init__(self, training_batch_size, validation_batch_size):
         training_dataset = Dataset(split="training", batch_size=training_batch_size)
         validation_dataset = Dataset(split="validation", batch_size=validation_batch_size)
         self.do_validate = tf.placeholder_with_default(False, ())

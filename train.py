@@ -5,34 +5,36 @@ from flags import FLAGS
 from data.splitting_dataset import SplittingDataset
 from model import Model
 
-CHECKPOINT_STEP = 1000
-CHECKPOINT_FOLDER = "checkpoints"
-CHECKPOINT_NAME = "model"
-VALIDATION_STEP = 100
 tf.logging.set_verbosity(tf.logging.INFO)
 
 
 class Train:
     def __init__(self):
+        self.run_checks()
         self.session = tf.Session()
+        with self.session.as_default():
+            self.data = SplittingDataset(training_batch_size=FLAGS.batch_size,
+                                         validation_batch_size=FLAGS.validation_batch_size)
 
-        self.data = SplittingDataset(training_batch_size=FLAGS.batch_size,
-                                     validation_batch_size=FLAGS.validation_batch_size)
+            model_config = dict()
+            self.experiment_name = FLAGS.experiment_name
+            self.model = Model(data=self.data, model_config=model_config)
+            self.summary_dir = FLAGS.master_folder + '/summaries/' + FLAGS.experiment_name + '/'
+            self.checkpoint_dir = FLAGS.master_folder + '/checkpoints/' + FLAGS.experiment_name + '/'
 
-        model_config = dict()
-        self.model = Model(data=self.data, model_config=model_config)
-        self.train_writer = tf.summary.FileWriter("summaries/train", self.session.graph)
-        self.validation_writer = tf.summary.FileWriter("summaries/validation", self.session.graph, flush_secs=20)
-        self.merged_summaries = tf.summary.merge_all()
+            self.train_writer = tf.summary.FileWriter(self.summary_dir + "train", self.session.graph)
+            self.validation_writer = tf.summary.FileWriter(self.summary_dir + "validation", self.session.graph,
+                                                           flush_secs=20)
+            self.merged_summaries = tf.summary.merge_all()
 
-        self.saver = tf.train.Saver(max_to_keep=6, keep_checkpoint_every_n_hours=3)
-        self.coord = tf.train.Coordinator()
+            self.saver = tf.train.Saver(max_to_keep=6, keep_checkpoint_every_n_hours=3)
+            self.coord = tf.train.Coordinator()
 
     def initialize(self):
         self.session.run(tf.variables_initializer(tf.global_variables()))
         self.session.run(tf.variables_initializer(tf.local_variables()))
 
-        latest_checkpoint = tf.train.latest_checkpoint(CHECKPOINT_FOLDER)
+        latest_checkpoint = tf.train.latest_checkpoint(self.checkpoint_dir)
         if latest_checkpoint:
             tf.logging.info("loading from checkpoint file: " + latest_checkpoint)
             self.saver.restore(self.session, latest_checkpoint)
@@ -55,13 +57,16 @@ class Train:
                                                                         self.model.accuracy])
                 last_step = step
                 tf.logging.info("step %d, loss %.6f, accuracy %.2f" % (step, loss, accuracy))
+
                 self.train_writer.add_summary(m, step)
-                if step % CHECKPOINT_STEP == 0:
-                    self.saver.save(self.session, CHECKPOINT_FOLDER + '/' + CHECKPOINT_NAME, global_step=step)
+
+                if step % FLAGS.checkpoint_step == 0:
+                    self.save_checkpoint(step)
+
                 last_step = step
 
                 # Do Validation sometimes
-                if last_step % VALIDATION_STEP == 0:
+                if last_step % FLAGS.validation_step == 0:
                     m, accuracy, confusion_matrix = self.session.run([self.merged_summaries,
                                                                       self.model.accuracy,
                                                                       self.model.confusion_matrix],
@@ -74,7 +79,10 @@ class Train:
             tf.logging.info('Done training -- epoch limit reached')
         finally:
             if last_step:
-                self.saver.save(self.session, CHECKPOINT_FOLDER + '/' + CHECKPOINT_NAME, global_step=last_step)
+                self.save_checkpoint(last_step)
+
+    def save_checkpoint(self, step):
+        self.saver.save(self.session, self.checkpoint_dir + "model", global_step=step)
 
     def finalize(self):
         self.validation_writer.flush()
@@ -89,6 +97,10 @@ class Train:
         self.initialize()
         self.run()
         self.finalize()
+
+    def run_checks(self):
+        assert FLAGS.experiment_name is not '' and FLAGS.experiment_name is not None, "Experiment name can not be empty"
+
 
 
 def main(_):

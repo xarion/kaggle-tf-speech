@@ -43,7 +43,6 @@ class Dataset:
 
         self.competition_labels = self.dataset_labels.competition_labels
         self.competition_labels_to_ids = self.dataset_labels.competition_labels_to_ids
-        self.dataset_labels = self.dataset_labels.dataset_labels
         self.label_lookup_dict = self.dataset_labels.dataset_labels_to_competition_ids
         self.number_of_labels = len(self.dataset_labels.competition_labels)
 
@@ -76,38 +75,38 @@ class Dataset:
             raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
                                          true_fn=lambda: (silent_data, silent_labels),
                                          false_fn=lambda: (labeled_data, labeled_labels))
-        if self.mfcc_inputs:
-            data = self.wav_to_mfcc(raw_data)
-        else:
-            data = raw_data
+            if self.mfcc_inputs:
+                data = self.wav_to_mfcc(raw_data)
+            else:
+                data = raw_data
 
-        inputs, labels = tf.train.shuffle_batch([data, label_id],
-                                                shapes=(self.input_dimensions, ()),
-                                                batch_size=self.batch_size,
-                                                num_threads=12,
-                                                capacity=self.batch_size * 2,
-                                                min_after_dequeue=self.batch_size)
-        file_names = tf.placeholder(dtype=tf.string, name="file_names_are_not_set_in_the_training_dataset")
+            inputs, labels = tf.train.shuffle_batch([data, label_id],
+                                                    shapes=(self.input_dimensions, ()),
+                                                    batch_size=self.batch_size,
+                                                    num_threads=12,
+                                                    capacity=self.batch_size * 2,
+                                                    min_after_dequeue=self.batch_size)
+            file_names = tf.placeholder(dtype=tf.string, name="file_names_are_not_set_in_the_training_dataset")
 
-        return inputs, labels, file_names
+            return inputs, labels, file_names
 
     def create_submission_inputs(self):
         with tf.device("/cpu:0"):
             raw_data, file_name = self.get_records(num_epochs=1)
 
-        if self.mfcc_inputs:
-            data = self.wav_to_mfcc(raw_data)
-        else:
-            data = raw_data
+            if self.mfcc_inputs:
+                data = self.wav_to_mfcc(raw_data)
+            else:
+                data = raw_data
 
-        inputs, file_names = tf.train.batch([data, file_name],
-                                            shapes=(self.input_dimensions, ()),
-                                            batch_size=self.batch_size,
-                                            num_threads=48,
-                                            capacity=self.batch_size * 10,
-                                            allow_smaller_final_batch=True)
-        labels = tf.placeholder(dtype=tf.int32, name="labels_are_not_set_in_the_submission_dataset")
-        return inputs, labels, file_names
+            inputs, file_names = tf.train.batch([data, file_name],
+                                                shapes=(self.input_dimensions, ()),
+                                                batch_size=self.batch_size,
+                                                num_threads=48,
+                                                capacity=self.batch_size * 10,
+                                                allow_smaller_final_batch=True)
+            labels = tf.placeholder(dtype=tf.int32, name="labels_are_not_set_in_the_submission_dataset")
+            return inputs, labels, file_names
 
     def create_training_dataset(self):
         with tf.device("/cpu:0"):
@@ -123,19 +122,19 @@ class Dataset:
             noisy_data = raw_data + background_noise
             noisy_data = tf.clip_by_value(noisy_data, -1.0, 1.0)
 
-        if self.mfcc_inputs:
-            data = self.wav_to_mfcc(noisy_data)
-        else:
-            data = noisy_data
+            if self.mfcc_inputs:
+                data = self.wav_to_mfcc(noisy_data)
+            else:
+                data = noisy_data
 
-        inputs, labels = tf.train.shuffle_batch([data, label_id],
-                                                shapes=(self.input_dimensions, ()),
-                                                batch_size=self.batch_size,
-                                                num_threads=32,
-                                                capacity=self.batch_size * 20,
-                                                min_after_dequeue=self.batch_size * 16)
-        file_names = tf.placeholder(dtype=tf.string, name="file_names_are_not_set_in_the_training_dataset")
-        return inputs, labels, file_names
+            inputs, labels = tf.train.shuffle_batch([data, label_id],
+                                                    shapes=(self.input_dimensions, ()),
+                                                    batch_size=self.batch_size,
+                                                    num_threads=32,
+                                                    capacity=self.batch_size * 20,
+                                                    min_after_dequeue=self.batch_size * 16)
+            file_names = tf.placeholder(dtype=tf.string, name="file_names_are_not_set_in_the_training_dataset")
+            return inputs, labels, file_names
 
     @staticmethod
     def wav_to_mfcc(raw_data):
