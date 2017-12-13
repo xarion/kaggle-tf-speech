@@ -1,7 +1,5 @@
 import tensorflow as tf
 
-from flags import FLAGS
-
 from data.splitting_dataset import SplittingDataset
 from model import Model
 
@@ -9,18 +7,18 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 
 class Train:
-    def __init__(self):
+    def __init__(self, parameters=None):
+        self.parameters = parameters
         self.run_checks()
         self.session = tf.Session()
         with self.session.as_default():
-            self.data = SplittingDataset(training_batch_size=FLAGS.batch_size,
-                                         validation_batch_size=FLAGS.validation_batch_size)
+            self.data = SplittingDataset(self.parameters)
 
             model_config = dict()
-            self.experiment_name = FLAGS.experiment_name
+            self.experiment_name = self.parameters.experiment_name
             self.model = Model(data=self.data, model_config=model_config)
-            self.summary_dir = FLAGS.master_folder + '/summaries/' + FLAGS.experiment_name + '/'
-            self.checkpoint_dir = FLAGS.master_folder + '/checkpoints/' + FLAGS.experiment_name + '/'
+            self.summary_dir = self.parameters.master_folder + '/summaries/' + self.parameters.experiment_name + '/'
+            self.checkpoint_dir = self.parameters.master_folder + '/checkpoints/' + self.parameters.experiment_name + '/'
 
             self.train_writer = tf.summary.FileWriter(self.summary_dir + "train", self.session.graph)
             self.validation_writer = tf.summary.FileWriter(self.summary_dir + "validation", self.session.graph,
@@ -60,13 +58,13 @@ class Train:
 
                 self.train_writer.add_summary(m, step)
 
-                if step % FLAGS.checkpoint_step == 0:
+                if step % self.parameters.checkpoint_step == 0:
                     self.save_checkpoint(step)
 
                 last_step = step
 
                 # Do Validation sometimes
-                if last_step % FLAGS.validation_step == 0:
+                if last_step % self.parameters.validation_step == 0:
                     m, accuracy, confusion_matrix = self.session.run([self.merged_summaries,
                                                                       self.model.accuracy,
                                                                       self.model.confusion_matrix],
@@ -99,14 +97,7 @@ class Train:
         self.finalize()
 
     def run_checks(self):
-        assert FLAGS.experiment_name is not '' and FLAGS.experiment_name is not None, "Experiment name can not be empty"
+        assert self.parameters.experiment_name is not '' and self.parameters.experiment_name is not None, "Experiment name can not be empty"
 
 
 
-def main(_):
-    t = Train()
-    t.train()
-
-
-if __name__ == '__main__':
-    tf.app.run()
