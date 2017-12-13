@@ -14,9 +14,8 @@ class Train:
         with self.session.as_default():
             self.data = SplittingDataset(self.parameters)
 
-            model_config = dict()
             self.experiment_name = self.parameters.experiment_name
-            self.model = Model(data=self.data, model_config=model_config)
+            self.model = Model(data=self.data, parameters=self.parameters)
             self.summary_dir = self.parameters.master_folder + '/summaries/' + self.parameters.experiment_name + '/'
             self.checkpoint_dir = self.parameters.master_folder + '/checkpoints/' + self.parameters.experiment_name + '/'
 

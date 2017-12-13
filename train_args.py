@@ -7,10 +7,11 @@ flags = tf.app.flags
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('master_folder', default_parameters['master_folder'], 'Location to store summaries and checkpoints')
+flags.DEFINE_string('model', default_parameters['model'], 'Model to use when training this')
 flags.DEFINE_string('experiment_name', default_parameters['experiment_name'],
                     'Unique name to distinguish the experiment from others')
 
-flags.DEFINE_integer('batch_size', default_parameters['batch_size'], 'Size of each training batch')
+flags.DEFINE_integer('training_batch_size', default_parameters['batch_size'], 'Size of each training batch')
 flags.DEFINE_integer('validation_batch_size', default_parameters['validation_batch_size'],
                      'Size of each training batch')
 flags.DEFINE_integer('checkpoint_step', default_parameters['checkpoint_step'], 'Size of each training batch')

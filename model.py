@@ -5,15 +5,16 @@ from blocks import Blocks
 
 class Model:
     def __init__(self, data, parameters):
+        self.parameters = parameters
         self.input = data.inputs
         self.labels = data.labels
         self.input_file_names = data.file_names
         self.blocks = Blocks()
         self.data = data
-        self.models = {"default_mfcc_model" : self.create_model,
-                       }
-        self.create_model()
-        self.parameters = parameters
+
+        self.models = {"default_mfcc_model": self.default_mfcc_model,
+                       "unfinished_model": self.unfinished_model}
+        self.models[self.parameters.model]()
 
     def default_mfcc_model(self):
 
@@ -82,7 +83,7 @@ class Model:
             with tf.control_dependencies(update_ops):
                 self.training_step = self.optimizer.minimize(self.loss, global_step=self.global_step)
 
-    def create_model(self):
+    def unfinished_model(self):
 
         assert not self.parameters.mfcc_inputs
 
@@ -99,7 +100,7 @@ class Model:
         with tf.variable_scope("conv_2"):
             conv_2 = self.blocks.conv2d(conv_1, [9, 1, 64, 128])
             conv_2 = self.blocks.normalized_relu_activation(conv_2)
-            conv_2 = tf.nn.max_pool(conv_2, [1, 2, 1, 1], [1, 2,1, 1], padding="VALID")
+            conv_2 = tf.nn.max_pool(conv_2, [1, 2, 1, 1], [1, 2, 1, 1], padding="VALID")
 
         with tf.variable_scope("conv_2_2"):
             conv_2 = self.blocks.conv2d(conv_2, [4, 10, 128, 256])
