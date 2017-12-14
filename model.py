@@ -14,11 +14,11 @@ class Model:
 
         self.models = {"default_mfcc_model": self.default_mfcc_model,
                        "unfinished_model": self.unfinished_model}
-        self.models[self.parameters.model]()
+        self.models[self.parameters['model']]()
 
     def default_mfcc_model(self):
 
-        assert self.parameters.mfcc_inputs
+        assert self.parameters['mfcc_inputs']
 
         self.input = tf.reshape(self.input, [-1, 98, 40, 1])
         with tf.variable_scope("conv_1"):
@@ -85,7 +85,7 @@ class Model:
 
     def unfinished_model(self):
 
-        assert not self.parameters.mfcc_inputs
+        assert not self.parameters['mfcc_inputs']
 
         with tf.variable_scope("conv_1"):
             conv_1 = self.blocks.conv2d(self.input, [9, 1, 1, 32])

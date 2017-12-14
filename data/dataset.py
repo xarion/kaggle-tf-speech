@@ -40,13 +40,13 @@ class Dataset:
         self.label_lookup_dict = self.dataset_labels.dataset_labels_to_competition_ids
         self.number_of_labels = len(self.dataset_labels.competition_labels)
 
-        self.mfcc_inputs = self.parameters.mfcc_inputs
+        self.mfcc_inputs = self.parameters['mfcc_inputs']
 
         if self.mfcc_inputs:
-            self.input_dimensions = (1, self.parameters.audio_sample_rate / self.parameters.spectogram_stride - 2,
-                                     self.parameters.dtc_coefficient_count, 1)
+            self.input_dimensions = (1, self.parameters['audio_sample_rate'] / self.parameters['spectogram_stride'] - 2,
+                                     self.parameters['dtc_coefficient_count'], 1)
         else:
-            self.input_dimensions = (1, self.parameters.audio_sample_rate, 1, 1)
+            self.input_dimensions = (1, self.parameters['audio_sample_rate'], 1, 1)
 
         # all sets self.inputs, self.file_names, self.labels
         # The model should be careful in what it is using, because some may be placeholders.
@@ -134,13 +134,13 @@ class Dataset:
     def wav_to_mfcc(self, raw_data):
         spectrogram = audio_ops.audio_spectrogram(
             raw_data,
-            window_size=self.parameters.spectogram_window_size,
-            stride=self.parameters.spectogram_stride,
+            window_size=self.parameters['spectogram_window_size'],
+            stride=self.parameters['spectogram_stride'],
             magnitude_squared=True)
         mfcc = audio_ops.mfcc(
             spectrogram,
-            self.parameters.audio_sample_rate,
-            dct_coefficient_count=self.parameters.dtc_coefficient_count)
+            self.parameters['audio_sample_rate'],
+            dct_coefficient_count=self.parameters['dtc_coefficient_count'])
         mfcc = tf.expand_dims(mfcc, -1)
         return mfcc
 
@@ -149,8 +149,8 @@ class Dataset:
             files = self.get_file_names()
             full_file_path = self.convert_to_string_input_producer(self.get_full_path_file_names(files))
 
-            # (self.parameters.audio_sample_rate * 1) because we want 1 second samples.
-            full_file_name, raw_data = self.decode_wav_queue(full_file_path, self.parameters.audio_sample_rate * 1)
+            # (self.parameters['audio_sample_rate'] * 1) because we want 1 second samples.
+            full_file_name, raw_data = self.decode_wav_queue(full_file_path, self.parameters['audio_sample_rate'] * 1)
 
             string_parts = tf.string_split([full_file_name], '/').values
             # file_name = string_parts[-1]
@@ -165,8 +165,8 @@ class Dataset:
             files = self.get_file_names()
             full_file_path = self.convert_to_string_input_producer(self.get_full_path_file_names(files), num_epochs)
 
-            # (self.parameters.audio_sample_rate * 1) because we want 1 second samples.
-            full_file_name, raw_data = self.decode_wav_queue(full_file_path, self.parameters.audio_sample_rate * 1)
+            # (self.parameters['audio_sample_rate'] * 1) because we want 1 second samples.
+            full_file_name, raw_data = self.decode_wav_queue(full_file_path, self.parameters['audio_sample_rate'] * 1)
 
             string_parts = tf.string_split([full_file_name], '/').values
             file_name = string_parts[-1]
@@ -248,7 +248,7 @@ class Dataset:
         return random_background
 
     def get_background_noise(self):
-        background_sample = self.get_random_background_noise(self.parameters.audio_sample_rate * 1)
+        background_sample = self.get_random_background_noise(self.parameters['audio_sample_rate'] * 1)
         background_multiplier = tf.random_uniform([], minval=0, maxval=0.1, dtype=tf.float32)
         background_noise = background_sample * background_multiplier
         return background_noise

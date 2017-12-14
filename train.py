@@ -14,10 +14,10 @@ class Train:
         with self.session.as_default():
             self.data = SplittingDataset(self.parameters)
 
-            self.experiment_name = self.parameters.experiment_name
+            self.experiment_name = self.parameters['experiment_name']
             self.model = Model(data=self.data, parameters=self.parameters)
-            self.summary_dir = self.parameters.master_folder + '/summaries/' + self.parameters.experiment_name + '/'
-            self.checkpoint_dir = self.parameters.master_folder + '/checkpoints/' + self.parameters.experiment_name + '/'
+            self.summary_dir = self.parameters['master_folder'] + '/summaries/' + self.parameters['experiment_name'] + '/'
+            self.checkpoint_dir = self.parameters['master_folder'] + '/checkpoints/' + self.parameters['experiment_name'] + '/'
 
             self.train_writer = tf.summary.FileWriter(self.summary_dir + "train", self.session.graph)
             self.validation_writer = tf.summary.FileWriter(self.summary_dir + "validation", self.session.graph,
@@ -57,13 +57,13 @@ class Train:
 
                 self.train_writer.add_summary(m, step)
 
-                if step % self.parameters.checkpoint_step == 0:
+                if step % self.parameters['checkpoint_step'] == 0:
                     self.save_checkpoint(step)
 
                 last_step = step
 
                 # Do Validation sometimes
-                if last_step % self.parameters.validation_step == 0:
+                if last_step % self.parameters['validation_step'] == 0:
                     m, accuracy, confusion_matrix = self.session.run([self.merged_summaries,
                                                                       self.model.accuracy,
                                                                       self.model.confusion_matrix],
@@ -96,7 +96,7 @@ class Train:
         self.finalize()
 
     def run_checks(self):
-        assert self.parameters.experiment_name is not '' and self.parameters.experiment_name is not None, "Experiment name can not be empty"
+        assert self.parameters['experiment_name'] is not '' and self.parameters['experiment_name'] is not None, "Experiment name can not be empty"
 
 
 

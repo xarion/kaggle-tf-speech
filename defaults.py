@@ -13,17 +13,11 @@ default_parameters_dict = {
     'model': 'default_mfcc_model'
 }
 
-
-class objectview(object):
-    def __init__(self, d):
-        self.__dict__ = d
-
-
-default_parameters = objectview(default_parameters_dict)
+default_parameters = default_parameters_dict.copy()
 
 
 def apply_defaults(parameters):
     for key in default_parameters_dict.keys():
         if key not in parameters:
-            parameters[key] = default_parameters[key]
+            parameters[key] = default_parameters_dict[key]
     return parameters
