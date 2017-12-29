@@ -1,7 +1,8 @@
 import tensorflow as tf
 
 from data.splitting_dataset import SplittingDataset
-from model import Model
+from models import get_model
+from submission_writer import SubmissionWriter
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -15,9 +16,14 @@ class Train:
             self.data = SplittingDataset(self.parameters)
 
             self.experiment_name = self.parameters['experiment_name']
-            self.model = Model(data=self.data, parameters=self.parameters)
-            self.summary_dir = self.parameters['master_folder'] + '/summaries/' + self.parameters['experiment_name'] + '/'
-            self.checkpoint_dir = self.parameters['master_folder'] + '/checkpoints/' + self.parameters['experiment_name'] + '/'
+
+            self.model_class = get_model(self.parameters)
+
+            self.model = self.model_class(data=self.data, parameters=self.parameters)
+            self.summary_dir = self.parameters['master_folder'] + '/summaries/' + self.parameters[
+                'experiment_name'] + '/'
+            self.checkpoint_dir = self.parameters['master_folder'] + '/checkpoints/' + self.parameters[
+                'experiment_name'] + '/'
 
             self.train_writer = tf.summary.FileWriter(self.summary_dir + "train", self.session.graph)
             self.validation_writer = tf.summary.FileWriter(self.summary_dir + "validation", self.session.graph,
@@ -40,11 +46,11 @@ class Train:
 
         tf.train.start_queue_runners(sess=self.session, coord=self.coord)
 
-    def run(self):
+    def run_training_batches(self):
         step = 0
         last_step = 0
         try:
-            while not self.coord.should_stop() and not (step >= 25000):
+            while not self.coord.should_stop() and not (step >= 7000):
                 # Train the model
                 m, _, loss, step, labels, accuracy, = self.session.run([self.merged_summaries,
                                                                         self.model.training_step,
@@ -64,10 +70,12 @@ class Train:
 
                 # Do Validation sometimes
                 if last_step % self.parameters['validation_step'] == 0:
-                    m, accuracy, confusion_matrix = self.session.run([self.merged_summaries,
-                                                                      self.model.accuracy,
-                                                                      self.model.confusion_matrix],
-                                                                     feed_dict={self.data.do_validate: True})
+                    m, accuracy, confusion_matrix, = self.session.run([self.merged_summaries,
+                                                                       self.model.accuracy,
+                                                                       self.model.confusion_matrix],
+                                                                      feed_dict={
+                                                                          self.data.do_validate: True
+                                                                      })
                     self.validation_writer.add_summary(m, global_step=step)
                     tf.logging.info("===== validation accuracy accuracy %.2f =====" % (accuracy))
                     tf.logging.info("\n" + str(confusion_matrix))
@@ -90,13 +98,37 @@ class Train:
         self.coord.wait_for_stop()
         self.session.close()
 
-    def train(self):
-        self.initialize()
-        self.run()
+    def run_checks(self):
+        print self.parameters['experiment_name']
+        assert self.parameters['experiment_name'] is not '' and self.parameters[
+            'experiment_name'] is not None, "Experiment name can not be empty"
+
+    def run_submission_batches(self):
+        submission_file = SubmissionWriter(
+            self.parameters['master_folder'] + "/submissions/" + self.parameters["experiment_name"],
+            self.data.competition_labels)
+        try:
+            while not self.coord.should_stop():
+                predictions, file_names, = self.session.run([self.model.prediction, self.model.input_file_names])
+                submission_file.add_records(predictions, file_names)
+
+        except tf.errors.OutOfRangeError:
+            tf.logging.info('Submission file created -- epoch limit reached')
+        submission_file.close()
         self.finalize()
 
-    def run_checks(self):
-        assert self.parameters['experiment_name'] is not '' and self.parameters['experiment_name'] is not None, "Experiment name can not be empty"
+    def train(self):
+        self.initialize()
+        self.run_training_batches()
+        self.finalize()
 
+    def submission(self):
+        self.initialize()
+        self.run_submission_batches()
+        self.finalize()
 
-
+    def run(self):
+        if self.parameters["training"]:
+            self.train()
+        else:
+            self.submission()

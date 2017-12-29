@@ -10,7 +10,18 @@ default_parameters_dict = {
     'spectogram_stride': 160,
     'dtc_coefficient_count': 40,
     'mfcc_inputs': True,
-    'model': 'default_mfcc_model'
+    'model': 'default_mfcc_model',
+    'training': True,
+    'model_setup': "0,4,4",
+    'model_width': 32,
+    'label_off_value': 0.0,
+    'label_on_value': 1.0,
+    'decay_rate': 0.0001,
+    'bigram_model': False,
+    'num_bigrams': 32,
+    'global_avg_pooling': True,
+    'background_multiplier_min': 0.0,
+    'background_multiplier_max': 0.1,
 }
 
 default_parameters = default_parameters_dict.copy()

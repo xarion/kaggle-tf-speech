@@ -1,9 +1,8 @@
 dataset_labels = ["_background_noise_", "bird", "dog", "eight", "four", "happy", "left", "nine", "off", "one",
-                          "seven", "six", "three", "two", "wow", "zero", "bed", "cat", "down", "five", "go", "house",
-                          "marvin", "no", "on", "right", "sheila", "stop", "tree", "up", "yes"]
+                  "seven", "six", "three", "two", "wow", "zero", "bed", "cat", "down", "five", "go", "house",
+                  "marvin", "no", "on", "right", "sheila", "stop", "tree", "up", "yes"]
 
-competition_labels = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go", "silence",
-                      "unknown"]
+competition_labels = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go", "silence", "unknown"]
 
 competition_labels_to_ids = dict(zip(competition_labels, range(0, len(competition_labels))))
 

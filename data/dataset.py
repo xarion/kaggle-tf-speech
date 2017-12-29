@@ -46,7 +46,7 @@ class Dataset:
             self.input_dimensions = (1, self.parameters['audio_sample_rate'] / self.parameters['spectogram_stride'] - 2,
                                      self.parameters['dtc_coefficient_count'], 1)
         else:
-            self.input_dimensions = (1, self.parameters['audio_sample_rate'], 1, 1)
+            self.input_dimensions = (self.parameters['audio_sample_rate'], 1, 1)
 
         # all sets self.inputs, self.file_names, self.labels
         # The model should be careful in what it is using, because some may be placeholders.
@@ -74,12 +74,13 @@ class Dataset:
                 data = self.wav_to_mfcc(raw_data)
             else:
                 data = raw_data
+                data = tf.expand_dims(data, -1)
 
             inputs, labels = tf.train.shuffle_batch([data, label_id],
                                                     shapes=(self.input_dimensions, ()),
                                                     batch_size=self.batch_size,
                                                     num_threads=12,
-                                                    capacity=self.batch_size * 2,
+                                                    capacity=self.batch_size * 4,
                                                     min_after_dequeue=self.batch_size)
             file_names = tf.placeholder(dtype=tf.string, name="file_names_are_not_set_in_the_training_dataset")
 
@@ -93,6 +94,7 @@ class Dataset:
                 data = self.wav_to_mfcc(raw_data)
             else:
                 data = raw_data
+                data = tf.expand_dims(data, -1)
 
             inputs, file_names = tf.train.batch([data, file_name],
                                                 shapes=(self.input_dimensions, ()),
@@ -121,6 +123,7 @@ class Dataset:
                 data = self.wav_to_mfcc(noisy_data)
             else:
                 data = noisy_data
+                data = tf.expand_dims(data, -1)
 
             inputs, labels = tf.train.shuffle_batch([data, label_id],
                                                     shapes=(self.input_dimensions, ()),
@@ -249,13 +252,15 @@ class Dataset:
 
     def get_background_noise(self):
         background_sample = self.get_random_background_noise(self.parameters['audio_sample_rate'] * 1)
-        background_multiplier = tf.random_uniform([], minval=0, maxval=0.1, dtype=tf.float32)
+        background_multiplier = tf.random_uniform([],
+                                                  minval=self.parameters['background_multiplier_min'],
+                                                  maxval=self.parameters['background_multiplier_max'], dtype=tf.float32)
         background_noise = background_sample * background_multiplier
         return background_noise
 
     @staticmethod
     def create_label_lookup_table():
-        import dataset_labels
+        from data import dataset_labels
 
         items = dataset_labels.dataset_labels_to_competition_ids.items()
         keys, values = zip(*items)
