@@ -289,26 +289,31 @@ class Dataset:
                        false_fn=lambda: (tf.reverse(raw_data, axis=[0]), unknown_label))
 
     def time_shift(self, data, num_samples=16000):
-        maxval = num_samples / 1600 + 2
-        minval = maxval - 4
+        def static_time_shifts(input_data, multiplier, max_samples):
+            if multiplier == 1:
+                resampled_data = data
+                pad_length = max_samples - num_samples
+            else:
+                shift = num_samples / 100
+                sample_length = num_samples - shift
+                final_length = sample_length * multiplier
+                np_indices = np.round(np.linspace(0, sample_length - 1, final_length)).astype(np.int32)
+                pad_length = max_samples - len(np_indices)
+                fixed_indices = tf.convert_to_tensor(np_indices)
+                random_starting_point = tf.random_uniform([], minval=0, maxval=shift - 1, dtype=tf.int32)
+                resampled_data = tf.gather(input_data[random_starting_point:], fixed_indices)
+            return tf.pad(resampled_data, [[0, int(pad_length)], [0, 0]])
 
-        multiplier = tf.random_uniform([], minval=minval, maxval=maxval, dtype=tf.int32)
-        height = multiplier * 1600
-
-        max_samples = maxval * 1600
-
+        multipliers = [0.8, 0.9, 1., 1.1, 1.2]
+        max_samples = int(max(multipliers)*num_samples)
         self.input_dimensions = (max_samples, 1, 1)
+        resamplers = [static_time_shifts(data, multiplier, max_samples) for multiplier in multipliers]
 
-        starting_point = tf.random_uniform([], minval=0, maxval=159)
-
-        indices = tf.linspace(0, num_samples - 160, height) + starting_point
-
-        random_sample_indices = tf.cast(tf.round(indices), dtype=tf.int32)
-
-        resampled_data = tf.gather(data, random_sample_indices)
-
-        height_padding = max_samples - height
-        resampled_data = tf.pad(resampled_data, [[0, height_padding], [0, 0]])
+        sel = tf.random_uniform([], maxval=4, dtype=tf.int32)
+        # Pass the real x only to one of the func calls.
+        resampled_data = control_flow_ops.merge(
+            [control_flow_ops.switch(resamplers[case], tf.equal(sel, case))[1]
+             for case in range(0, 4)])[0]
 
         return resampled_data
 
