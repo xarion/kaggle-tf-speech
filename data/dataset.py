@@ -1,7 +1,8 @@
 import tensorflow as tf
-import numpy as np
 from tensorflow.contrib.framework.python.ops import audio_ops
 from tensorflow.python.ops import control_flow_ops
+
+import numpy as np
 
 TRAINING_DATA_DIR = "/home/erdi/dev/data/train/audio/"
 SUBMISSION_DATA_DIR = "/home/erdi/dev/data/test/audio/"
@@ -10,6 +11,7 @@ DATA_DIRS = {"training": TRAINING_DATA_DIR,
              "test": TRAINING_DATA_DIR,
              "submission": SUBMISSION_DATA_DIR}
 TRAINING_LIST = "data/balanced_training_list.txt"
+
 VALIDATION_LIST = "data/balanced_validation_list.txt"
 
 TRAINING_BACKGROUND_NOISES = ["_background_noise_/doing_the_dishes.wav",
@@ -42,11 +44,7 @@ class Dataset:
 
         self.mfcc_inputs = self.parameters['mfcc_inputs']
 
-        if self.mfcc_inputs:
-            self.input_dimensions = (1, self.parameters['audio_sample_rate'] / self.parameters['spectogram_stride'] - 2,
-                                     self.parameters['dtc_coefficient_count'], 1)
-        else:
-            self.input_dimensions = (self.parameters['audio_sample_rate'], 1, 1)
+        self.input_dimensions = (self.parameters['audio_sample_rate'], 1, 1)
 
         # all sets self.inputs, self.file_names, self.labels
         # The model should be careful in what it is using, because some may be placeholders.
@@ -70,6 +68,7 @@ class Dataset:
             raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
                                          true_fn=lambda: (silent_data, silent_labels),
                                          false_fn=lambda: (labeled_data, labeled_labels))
+            # raw_data = self.maybe_random_resample(raw_data)
             if self.mfcc_inputs:
                 data = self.wav_to_mfcc(raw_data)
             else:
@@ -111,18 +110,16 @@ class Dataset:
             silent_data, silent_labels = self.get_silent_records()
             labeled_data, labeled_labels = self.get_labeled_records()
 
+            labeled_data, labeled_labels = self.maybe_revert_audio_and_make_unknown(labeled_data, labeled_labels)
+
             raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
                                          true_fn=lambda: (silent_data, silent_labels),
                                          false_fn=lambda: (labeled_data, labeled_labels))
 
-            background_noise = self.get_background_noise()
-            noisy_data = raw_data + background_noise
-            noisy_data = tf.clip_by_value(noisy_data, -1.0, 1.0)
-
             if self.mfcc_inputs:
-                data = self.wav_to_mfcc(noisy_data)
+                data = self.wav_to_mfcc(raw_data)
             else:
-                data = noisy_data
+                data = raw_data
                 data = tf.expand_dims(data, -1)
 
             inputs, labels = tf.train.shuffle_batch([data, label_id],
@@ -145,6 +142,10 @@ class Dataset:
             self.parameters['audio_sample_rate'],
             dct_coefficient_count=self.parameters['dtc_coefficient_count'])
         mfcc = tf.expand_dims(mfcc, -1)
+        self.input_dimensions = (self.input_dimensions[0] / self.parameters['spectogram_stride'] - 2,
+                                 self.parameters['dtc_coefficient_count'],
+                                 1)
+        mfcc = tf.squeeze(mfcc, 0)
         return mfcc
 
     def get_labeled_records(self):
@@ -160,7 +161,11 @@ class Dataset:
             # speaker_id = tf.string_split([file_name], '_').values[0]
             label_name = string_parts[-2]
             label_id = self.label_lookup_table.lookup(label_name)
-
+            if self.split == "train":
+                raw_data = self.maybe_random_resample(raw_data)
+                background_noise = self.get_background_noise()
+                raw_data = raw_data + background_noise
+                raw_data = tf.clip_by_value(raw_data, -1.0, 1.0)
             return raw_data, label_id
 
     def get_records(self, num_epochs=None):
@@ -178,13 +183,16 @@ class Dataset:
 
     def get_silent_records(self):
         with tf.variable_scope("silent_records"):
-            return self.get_background_noise(), tf.constant(self.competition_labels_to_ids["silence"])
+            raw_data = self.get_background_noise()
+            # raw_data = self.maybe_random_resample(raw_data)
+            return raw_data, tf.constant(self.competition_labels_to_ids["silence"])
 
     def get_file_names(self):
         with open(self.file_list) as f:
             files = []
             for line in f.readlines():
                 files.append(line.strip())
+            np.random.shuffle(files)
         return files
 
     @staticmethod
@@ -210,7 +218,6 @@ class Dataset:
         file_name, wav_file = reader.read(file_path)
 
         raw_audio, samples = audio_ops.decode_wav(wav_file, desired_channels=1, desired_samples=num_samples)
-
         return file_name, raw_audio
 
     @staticmethod
@@ -251,12 +258,13 @@ class Dataset:
         return random_background
 
     def get_background_noise(self):
-        background_sample = self.get_random_background_noise(self.parameters['audio_sample_rate'] * 1)
+        background_sample = self.get_random_background_noise(self.input_dimensions[0])
         background_multiplier = tf.random_uniform([],
                                                   minval=self.parameters['background_multiplier_min'],
-                                                  maxval=self.parameters['background_multiplier_max'], dtype=tf.float32)
-        background_noise = background_sample * background_multiplier
-        return background_noise
+                                                  maxval=self.parameters['background_multiplier_max'],
+                                                  dtype=tf.float32)
+        background_sample = background_sample * background_multiplier
+        return background_sample
 
     @staticmethod
     def create_label_lookup_table():
@@ -271,3 +279,53 @@ class Dataset:
         table.init.run()
 
         return table, dataset_labels
+
+    def maybe_revert_audio_and_make_unknown(self, raw_data, label):
+        unknown_label = tf.constant(self.competition_labels_to_ids["unknown"])
+        random_selector_variable = tf.random_uniform([], minval=0, maxval=1, dtype=tf.float32)
+
+        return tf.cond(tf.less(random_selector_variable, tf.constant(0.95)),
+                       true_fn=lambda: (raw_data, label),
+                       false_fn=lambda: (tf.reverse(raw_data, axis=[0]), unknown_label))
+
+    def time_shift(self, data, num_samples=16000):
+        maxval = num_samples / 1600 + 2
+        minval = maxval - 4
+
+        multiplier = tf.random_uniform([], minval=minval, maxval=maxval, dtype=tf.int32)
+        height = multiplier * 1600
+
+        max_samples = maxval * 1600
+
+        self.input_dimensions = (max_samples, 1, 1)
+
+        starting_point = tf.random_uniform([], minval=0, maxval=159)
+
+        indices = tf.linspace(0, num_samples - 160, height) + starting_point
+
+        random_sample_indices = tf.cast(tf.round(indices), dtype=tf.int32)
+
+        resampled_data = tf.gather(data, random_sample_indices)
+
+        height_padding = max_samples - height
+        resampled_data = tf.pad(resampled_data, [[0, height_padding], [0, 0]])
+
+        return resampled_data
+
+    def add_white_noise(self, data):
+        white_noise = tf.random_uniform([self.input_dimensions[0], 1], minval=-0.005, maxval=0.005)
+        return tf.add(data, white_noise)
+
+    def pitch_shift(self, data):
+        coefficient = tf.random_uniform([], minval=8, maxval=12, dtype=tf.float32) / 10
+        constant = tf.random_uniform([], minval=-2, maxval=2, dtype=tf.float32) / (2 ** 15 / 100)
+        return (data + constant) * coefficient
+        # return data * coefficient
+
+    def maybe_random_resample(self, data, num_samples=16000):
+        if self.parameters["random_resample"]:
+            data = self.pitch_shift(data)
+            data = self.time_shift(data, num_samples)
+            data = self.add_white_noise(data)
+
+        return data

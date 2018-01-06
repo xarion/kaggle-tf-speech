@@ -48,9 +48,25 @@ flags.DEFINE_bool('bigram_model', default_parameters['bigram_model'],
 
 flags.DEFINE_integer('num_bigrams', default_parameters['num_bigrams'], 'Model to use when training this')
 
+flags.DEFINE_integer('max_model_width', default_parameters['max_model_width'], 'max number of features per layer.')
+
+flags.DEFINE_bool('use_adam', default_parameters['use_adam'], 'Use adam optimizer instead of gradient descent')
+
+flags.DEFINE_bool('accuracy_regulated_decay', default_parameters['accuracy_regulated_decay'],
+                  'Multiplies the decay with 1 - accuracy.')
+
+flags.DEFINE_bool('loss_regulated_decay', default_parameters['loss_regulated_decay'],
+                  'Multiplies the decay with loss.')
+flags.DEFINE_bool('random_resample', default_parameters['random_resample'],
+                  'randomly resamples data')
+
 flags.DEFINE_bool('global_avg_pooling', default_parameters['global_avg_pooling'],
                   "Use global average pooling in the last layer to reduce the dimensions. " +
                   "Flattens the layer if false.")
+
+flags.DEFINE_integer('filter_size', default_parameters['filter_size'], 'length of filters(kernels) to use in convolutions')
+flags.DEFINE_integer('stride_length', default_parameters['stride_length'], 'stride length to use')
+
 
 FLAGS = flags.FLAGS
 

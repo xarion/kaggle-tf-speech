@@ -1,7 +1,7 @@
 import dataset_labels
 
 entries = []
-with open("nonval") as f:
+with open("training_list.txt") as f:
     for line in f.readlines():
         entries.append(line.strip())
 
@@ -23,7 +23,7 @@ print label_counts
 
 for label in labeled_entries.keys():
     if label != "unknown":
-        labeled_entries[label] = labeled_entries[label] * 17
+        labeled_entries[label] = labeled_entries[label] * 37
 
 label_counts = dict()
 

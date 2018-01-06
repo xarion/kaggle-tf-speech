@@ -1,6 +1,7 @@
 import tensorflow as tf
 
 from data.splitting_dataset import SplittingDataset
+from defaults import default_parameters
 from models import get_model
 from submission_writer import SubmissionWriter
 
@@ -49,8 +50,10 @@ class Train:
     def run_training_batches(self):
         step = 0
         last_step = 0
+        max_accuracy = 0.9
+        val_accuracy = 0.
         try:
-            while not self.coord.should_stop() and not (step >= 7000):
+            while not self.coord.should_stop() and not (step >= 30000):
                 # Train the model
                 m, _, loss, step, labels, accuracy, = self.session.run([self.merged_summaries,
                                                                         self.model.training_step,
@@ -63,31 +66,32 @@ class Train:
 
                 self.train_writer.add_summary(m, step)
 
-                if step % self.parameters['checkpoint_step'] == 0:
-                    self.save_checkpoint(step)
+
 
                 last_step = step
 
                 # Do Validation sometimes
                 if last_step % self.parameters['validation_step'] == 0:
-                    m, accuracy, confusion_matrix, = self.session.run([self.merged_summaries,
+                    m, val_accuracy, confusion_matrix, = self.session.run([self.merged_summaries,
                                                                        self.model.accuracy,
                                                                        self.model.confusion_matrix],
                                                                       feed_dict={
                                                                           self.data.do_validate: True
                                                                       })
                     self.validation_writer.add_summary(m, global_step=step)
-                    tf.logging.info("===== validation accuracy accuracy %.2f =====" % (accuracy))
+                    tf.logging.info("===== validation accuracy accuracy %.2f =====" % (val_accuracy))
                     tf.logging.info("\n" + str(confusion_matrix))
+                    if val_accuracy > max_accuracy:
+                        self.save_checkpoint(step, val_accuracy)
+                        max_accuracy = val_accuracy
 
         except tf.errors.OutOfRangeError:
             tf.logging.info('Done training -- epoch limit reached')
         finally:
-            if last_step:
-                self.save_checkpoint(last_step)
+            self.save_checkpoint(last_step, val_accuracy)
 
-    def save_checkpoint(self, step):
-        self.saver.save(self.session, self.checkpoint_dir + "model", global_step=step)
+    def save_checkpoint(self, step, accuracy):
+        self.saver.save(self.session, self.checkpoint_dir + "model-%.2f" % accuracy, global_step=step)
 
     def finalize(self):
         self.validation_writer.flush()

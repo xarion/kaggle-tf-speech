@@ -14,10 +14,16 @@ class Model:
         self.label_on_value = parameters["label_on_value"]
         self.label_off_value = parameters["label_off_value"]
         self.decay_rate = parameters["decay_rate"]
+        self.filter_size = parameters["filter_size"]
+        self.stride_length = parameters["stride_length"]
         self.bigram_model = parameters["bigram_model"]
         self.num_bigrams = parameters["num_bigrams"]
+        self.max_model_width = parameters["max_model_width"]
         self.global_avg_pooling = parameters["global_avg_pooling"]
-        self.blocks = Blocks(self.training)
+        self.use_adam = parameters["use_adam"]
+        self.accuracy_regulated_decay = parameters["accuracy_regulated_decay"]
+        self.loss_regulated_decay = parameters["loss_regulated_decay"]
+        self.blocks = Blocks(self.training, parameters)
         self.model_width = parameters["model_width"]  # 32
         self.model_setup = map(lambda x: int(x.strip()), parameters["model_setup"].split(','))  # [0, 4, 4]
         self.input = data.inputs
@@ -33,8 +39,8 @@ class Model:
         self.global_step = None
         self.one_hot_truth = None
         self.optimizer = None
-        self.optimize()
         self.evaluation()
+        self.optimize()
         # dummy variable that is temporarily ignored
 
     def inference(self, preprocessed_input):
@@ -43,7 +49,7 @@ class Model:
 
         with tf.variable_scope("conv_1_1"):
             conv_1_1 = self.blocks.conv2d(preprocessed_input,
-                                          filter_size=9,
+                                          filter_size=self.filter_size,
                                           input_channels=1,
                                           output_channels=channels,
                                           strides=1)
@@ -52,13 +58,19 @@ class Model:
 
         for residual_block_set in range(0, len(self.model_setup)):
             output_channels = input_channels * 2
+            if self.max_model_width < output_channels:
+                output_channels = self.max_model_width
+
+            if self.model_setup[residual_block_set] == 0:
+                residual_layer = tf.nn.max_pool(residual_layer, ksize=[1, self.filter_size, 1, 1], strides=[1, self.stride_length, 1, 1],
+                                                padding="SAME")
 
             for residual_block in range(0, self.model_setup[residual_block_set]):
                 with tf.variable_scope("conv_%d_%d" % (residual_block_set + 2, residual_block + 1)):
                     residual_layer = self.blocks.residual_conv2d(residual_layer,
                                                                  input_channels=input_channels,
                                                                  output_channels=output_channels,
-                                                                 strides=4 if residual_block == 0 else 1,
+                                                                 strides=self.stride_length if residual_block == 0 else 1,
                                                                  activate_before_residual=residual_block == 0)
                     input_channels = output_channels
 
@@ -107,20 +119,29 @@ class Model:
                                                        off_value=self.label_off_value))
             cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=self.logits, labels=self.one_hot_truth)
             self.loss = tf.reduce_mean(cross_entropy)
-            self.loss = self.loss + self.decay()
+            if self.accuracy_regulated_decay:
+                self.loss = self.loss + (1 - self.accuracy) * self.decay()
+            elif self.loss_regulated_decay:
+                self.loss = self.loss + self.loss * self.decay()
+            else:
+                self.loss = self.loss + self.decay()
             tf.add_to_collection('losses', self.loss)
             tf.summary.scalar('loss_total', self.loss)
 
         with tf.variable_scope('train'):
             self.global_step = tf.Variable(0, name='global_step', trainable=False)
             self.probabilities = tf.nn.softmax(self.logits)
-            boundaries = [4000, 6000]
-            values = [0.1, 0.01, 0.001]
 
-            self.learning_rate = tf.train.piecewise_constant(self.global_step, boundaries, values)
-            tf.summary.scalar('learning_rate', self.learning_rate)
+            if self.use_adam:
+                self.optimizer = tf.train.AdamOptimizer()
+            else:
+                boundaries = [30000, 45000]
+                values = [0.1, 0.01, 0.001]
 
-            self.optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate)
+                self.learning_rate = tf.train.piecewise_constant(self.global_step, boundaries, values)
+                tf.summary.scalar('learning_rate', self.learning_rate)
+
+                self.optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate)
 
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
             with tf.control_dependencies(update_ops):

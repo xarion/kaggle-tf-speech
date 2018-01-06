@@ -3,7 +3,10 @@ from tensorflow.contrib import layers
 
 
 class Blocks:
-    def __init__(self, training=True):
+    def __init__(self, training=True, parameters=None):
+        self.parameters = parameters
+        self.filter_size = self.parameters["filter_size"]
+        self.stride_length = self.parameters["stride_length"]
         self.training = training
         self.decayed_variables = []
         self.total_parameters = 0l
@@ -55,7 +58,7 @@ class Blocks:
             pointwise_results = tf.nn.conv2d(depthwise_results,
                                              pointwise_weights,
                                              [1, 1, 1, 1],
-                                             padding="VALID")
+                                             padding="SAME")
 
             pointwise_results = self.add_bias(pointwise_results, output_channels)
 
@@ -96,7 +99,7 @@ class Blocks:
                 residual = tf.nn.max_pool(residual,
                                           ksize=[1, strides, 1, 1],
                                           strides=[1, strides, 1, 1],
-                                          padding="VALID")
+                                          padding="SAME")
 
                 residual = self.pad_residual_features(residual,
                                                       input_channels,
@@ -119,7 +122,7 @@ class Blocks:
 
         with tf.variable_scope("convolution_1"):
             features = self.conv2d(input_layer,
-                                   filter_size=9,
+                                   filter_size=self.filter_size,
                                    input_channels=input_channels,
                                    output_channels=output_channels,
                                    strides=strides)
@@ -128,7 +131,7 @@ class Blocks:
             features = self.batch_normalization(features)
             features = self.relu(features)
             features = self.conv2d(features,
-                                   filter_size=9,
+                                   filter_size=self.filter_size,
                                    input_channels=output_channels,
                                    output_channels=output_channels,
                                    strides=1)
