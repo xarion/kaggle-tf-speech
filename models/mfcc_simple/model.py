@@ -21,27 +21,26 @@ class Model:
         assert self.parameters['mfcc_inputs']
 
         with tf.variable_scope("conv_1"):
-            conv_1 = self.blocks.conv2d(self.input, [8, 20, 1, 32])
-            conv_1 = self.blocks.normalized_relu_activation(conv_1)
-            # conv_1 = tf.nn.max_pool(conv_1, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
-
-        with tf.variable_scope("conv_1_2"):
-            conv_1 = self.blocks.conv2d(conv_1, [8, 20, 32, 64])
+            conv_1 = self.blocks.conv2d(self.input, [20, 8, 1, 64])
             conv_1 = tf.nn.max_pool(conv_1, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
             conv_1 = self.blocks.normalized_relu_activation(conv_1)
 
-        with tf.variable_scope("conv_2"):
-            conv_2 = self.blocks.conv2d(conv_1, [4, 10, 64, 128])
-            conv_2 = self.blocks.normalized_relu_activation(conv_2)
+        # with tf.variable_scope("conv_1_2"):
+        #     conv_1 = self.blocks.conv2d(conv_1, [8, 20, 64, 64])
+        #     conv_1 = tf.nn.max_pool(conv_1, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
+        #     conv_1 = self.blocks.normalized_relu_activation(conv_1)
 
-        with tf.variable_scope("conv_2_2"):
-            conv_2 = self.blocks.conv2d(conv_2, [4, 10, 128, 256])
+        with tf.variable_scope("conv_2"):
+            conv_2 = self.blocks.conv2d(conv_1, [10, 4, 64, 128])
             conv_2 = tf.nn.max_pool(conv_2, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
             conv_2 = self.blocks.normalized_relu_activation(conv_2)
+        # with tf.variable_scope("conv_2_2"):
+        #     conv_2 = self.blocks.conv2d(conv_2, [4, 10, 128, 256])
+        #     conv_2 = tf.nn.max_pool(conv_2, [1, 2, 2, 1], [1, 2, 2, 1], padding="VALID")
+        #     conv_2 = self.blocks.normalized_relu_activation(conv_2)
 
         with tf.variable_scope("fc"):
-            global_avg_pooling = tf.reduce_mean(conv_2, axis=1, keep_dims=True)
-            final_fc = self.blocks.fc(global_avg_pooling, 2560, self.data.number_of_labels)
+            final_fc = self.blocks.fc(conv_2, 30720, self.data.number_of_labels)
 
         with tf.variable_scope("accuracy"):
             self.logits = final_fc
@@ -60,7 +59,7 @@ class Model:
             cost = []
             for weight in self.blocks.weights:
                 cost.append(tf.nn.l2_loss(weight))
-            decay = 0.01 * tf.reduce_sum(cost)
+            decay = 0.0001 * tf.reduce_sum(cost)
 
         with tf.variable_scope("all_losses"):
             self.loss = self.classification_loss + decay
@@ -138,7 +137,7 @@ class Model:
 
         with tf.variable_scope('classification_gradient'):
             boundaries = [20000]
-            values = [0.001, 0.0001]
+            values = [0.1, 0.01]
 
             self.global_step = tf.Variable(0, name='global_step', trainable=False)
             self.learning_rate = tf.train.piecewise_constant(self.global_step, boundaries, values)

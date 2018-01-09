@@ -23,7 +23,7 @@ print label_counts
 
 for label in labeled_entries.keys():
     if label != "unknown":
-        labeled_entries[label] = labeled_entries[label] * 37
+        labeled_entries[label] = labeled_entries[label] * 17
 
 label_counts = dict()
 

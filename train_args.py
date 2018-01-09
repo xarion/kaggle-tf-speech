@@ -24,6 +24,7 @@ flags.DEFINE_integer('spectogram_stride', default_parameters['spectogram_stride'
 flags.DEFINE_integer('dtc_coefficient_count', default_parameters['dtc_coefficient_count'],
                      'Size of each training batch')
 flags.DEFINE_bool('mfcc_inputs', default_parameters['mfcc_inputs'], "Use MFCC data or raw data samples")
+flags.DEFINE_bool('log_mel_inputs', default_parameters['log_mel_inputs'], "Use Log Mel Spectogram data or raw data samples")
 
 flags.DEFINE_bool('training', default_parameters['training'],
                   "Do not set this from args. This is supposed to be handled internally.")
@@ -47,6 +48,8 @@ flags.DEFINE_bool('bigram_model', default_parameters['bigram_model'],
                   "Compute 'bigrams' and reduce dimensions before the last layer.")
 
 flags.DEFINE_integer('num_bigrams', default_parameters['num_bigrams'], 'Model to use when training this')
+flags.DEFINE_bool('sigmoid_unknown', default_parameters['sigmoid_unknown'],
+                     'Use a sigmoid label for unknown and silent classes')
 
 flags.DEFINE_integer('max_model_width', default_parameters['max_model_width'], 'max number of features per layer.')
 

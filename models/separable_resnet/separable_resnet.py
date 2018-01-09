@@ -21,6 +21,7 @@ class Model:
         self.max_model_width = parameters["max_model_width"]
         self.global_avg_pooling = parameters["global_avg_pooling"]
         self.use_adam = parameters["use_adam"]
+        self.sigmoid_unknown = parameters["sigmoid_unknown"]
         self.accuracy_regulated_decay = parameters["accuracy_regulated_decay"]
         self.loss_regulated_decay = parameters["loss_regulated_decay"]
         self.blocks = Blocks(self.training, parameters)
@@ -62,7 +63,8 @@ class Model:
                 output_channels = self.max_model_width
 
             if self.model_setup[residual_block_set] == 0:
-                residual_layer = tf.nn.max_pool(residual_layer, ksize=[1, self.filter_size, 1, 1], strides=[1, self.stride_length, 1, 1],
+                residual_layer = tf.nn.max_pool(residual_layer, ksize=[1, self.filter_size, 1, 1],
+                                                strides=[1, self.stride_length, 1, 1],
                                                 padding="SAME")
 
             for residual_block in range(0, self.model_setup[residual_block_set]):
@@ -85,9 +87,9 @@ class Model:
                 input_channels = output_channels
 
         if self.global_avg_pooling:
-            with tf.variable_scope("fc"):
+            with tf.variable_scope("global_pooling"):
                 # global average pooling
-                residual_layer = tf.reduce_mean(residual_layer, [1, 2])
+                residual_layer = tf.reduce_max(residual_layer, [1, 2])
                 residual_layer = self.blocks.batch_normalization(residual_layer)
                 residual_layer = self.blocks.relu(residual_layer)
                 # residual_layer = self.blocks.biased_fc(residual_layer,
@@ -114,11 +116,27 @@ class Model:
 
     def optimize(self):
         with tf.variable_scope('loss'):
-            self.one_hot_truth = tf.squeeze(tf.one_hot(self.labels, 12,
-                                                       on_value=self.label_on_value,
-                                                       off_value=self.label_off_value))
-            cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=self.logits, labels=self.one_hot_truth)
-            self.loss = tf.reduce_mean(cross_entropy)
+            if not self.sigmoid_unknown:
+                self.one_hot_truth = tf.squeeze(tf.one_hot(self.labels, 12,
+                                                           on_value=self.label_on_value,
+                                                           off_value=self.label_off_value))
+                cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=self.logits, labels=self.one_hot_truth)
+                self.loss = tf.reduce_mean(cross_entropy)
+            else:
+                self.one_hot_truth = tf.squeeze(tf.one_hot(self.labels, 12,
+                                                           on_value=self.label_on_value,
+                                                           off_value=self.label_off_value))
+                class_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=self.logits[:, :11],
+                                                                              labels=self.one_hot_truth[:, :11])
+                class_results = tf.reduce_max(self.one_hot_truth[:, :11], axis=1)
+                silent_unknown_cross_entropy = \
+                    tf.nn.sigmoid_cross_entropy_with_logits(logits=self.logits[:, 11:],
+                                                            labels=self.one_hot_truth[:, 11:] * 0.97)
+
+                self.loss = tf.reduce_mean(class_cross_entropy * class_results)
+                self.loss += tf.reduce_mean(silent_unknown_cross_entropy)
+                self.loss += (1. - self.accuracy)
+
             if self.accuracy_regulated_decay:
                 self.loss = self.loss + (1 - self.accuracy) * self.decay()
             elif self.loss_regulated_decay:
@@ -135,7 +153,7 @@ class Model:
             if self.use_adam:
                 self.optimizer = tf.train.AdamOptimizer()
             else:
-                boundaries = [30000, 45000]
+                boundaries = [50000, 75000]
                 values = [0.1, 0.01, 0.001]
 
                 self.learning_rate = tf.train.piecewise_constant(self.global_step, boundaries, values)
@@ -149,7 +167,18 @@ class Model:
 
     def evaluation(self):
         with tf.variable_scope('accuracy'):
-            self.prediction = tf.cast(tf.argmax(self.logits, 1), tf.int32)
+            if not self.sigmoid_unknown:
+                self.prediction = tf.cast(tf.argmax(self.logits, 1), tf.int32)
+            else:
+                class_predictions = tf.cast(tf.argmax(self.logits[:, :11], 1), tf.int32)
+                silent_unknown_sigmoids = tf.nn.sigmoid(self.logits[:, 11:])
+                silent_unknown_labels = tf.cast(tf.argmax(silent_unknown_sigmoids, 1), tf.int32) + 11
+                accepted_silent_unknown_labels = tf.cast(tf.greater_equal(tf.reduce_max(silent_unknown_sigmoids, axis=1), 0.8), tf.int32)
+                self.prediction = \
+                    class_predictions - (class_predictions * accepted_silent_unknown_labels) \
+                    + silent_unknown_labels * accepted_silent_unknown_labels
+
+
             correct_prediction = tf.equal(self.prediction, self.labels)
             self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 

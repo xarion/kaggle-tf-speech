@@ -27,8 +27,7 @@ class Train:
                 'experiment_name'] + '/'
 
             self.train_writer = tf.summary.FileWriter(self.summary_dir + "train", self.session.graph)
-            self.validation_writer = tf.summary.FileWriter(self.summary_dir + "validation", self.session.graph,
-                                                           flush_secs=20)
+            self.validation_writer = tf.summary.FileWriter(self.summary_dir + "validation", self.session.graph)
             self.merged_summaries = tf.summary.merge_all()
 
             self.saver = tf.train.Saver(max_to_keep=6, keep_checkpoint_every_n_hours=3)
@@ -53,7 +52,7 @@ class Train:
         max_accuracy = 0.9
         val_accuracy = 0.
         try:
-            while not self.coord.should_stop() and not (step >= 30000):
+            while not self.coord.should_stop() and not (step >= 35000):
                 # Train the model
                 m, _, loss, step, labels, accuracy, = self.session.run([self.merged_summaries,
                                                                         self.model.training_step,
@@ -62,7 +61,7 @@ class Train:
                                                                         self.model.labels,
                                                                         self.model.accuracy])
                 last_step = step
-                tf.logging.info("step %d, loss %.6f, accuracy %.2f" % (step, loss, accuracy))
+                # tf.logging.info("step %d, loss %.6f, accuracy %.2f" % (step, loss, accuracy))
 
                 self.train_writer.add_summary(m, step)
 
@@ -79,6 +78,7 @@ class Train:
                                                                           self.data.do_validate: True
                                                                       })
                     self.validation_writer.add_summary(m, global_step=step)
+                    self.validation_writer.flush()
                     tf.logging.info("===== validation accuracy accuracy %.2f =====" % (val_accuracy))
                     tf.logging.info("\n" + str(confusion_matrix))
                     if val_accuracy > max_accuracy:
