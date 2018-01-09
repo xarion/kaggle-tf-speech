@@ -25,17 +25,17 @@ class Blocks:
         relu = tf.nn.relu(input_layer)
         return relu
 
-    def conv2d_with_filter(self, input_layer, filter_size, input_channels, output_channels, strides):
+    def conv2d_with_filter(self, input_layer, filter_size, input_channels, output_channels, strides, padding="SAME"):
         weights = self.weight_variable("conv_weights", [filter_size[0], filter_size[1], input_channels, output_channels])
         self.decayed_variables.append(weights)
-        logits = tf.nn.conv2d(input_layer, weights, strides=[1, strides, strides, 1], padding="SAME")
+        logits = tf.nn.conv2d(input_layer, weights, strides=[1, strides, strides, 1], padding=padding)
         logits = self.add_bias(logits, output_channels)
         return logits
 
-    def conv2d(self, input_layer, filter_size, input_channels, output_channels, strides):
+    def conv2d(self, input_layer, filter_size, input_channels, output_channels, strides, padding="SAME"):
         weights = self.weight_variable("conv_weights", [filter_size, filter_size, input_channels, output_channels])
         self.decayed_variables.append(weights)
-        logits = tf.nn.conv2d(input_layer, weights, strides=[1, strides, strides, 1], padding="SAME")
+        logits = tf.nn.conv2d(input_layer, weights, strides=[1, strides, strides, 1], padding=padding)
         logits = self.add_bias(logits, output_channels)
         return logits
 

@@ -53,7 +53,8 @@ class Model:
                                                       filter_size=[20, 8],
                                                       input_channels=1,
                                                       output_channels=channels,
-                                                      strides=1)
+                                                      strides=1,
+                                                      padding="VALID")
         residual_layer = conv_1_1
         input_channels = channels
 
