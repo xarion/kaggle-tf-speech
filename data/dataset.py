@@ -382,4 +382,4 @@ class Dataset:
         return data + coefficient * noise * data_energy / noise_energy
 
     def get_energy(self, data):
-        return tf.sqrt(tf.reduce_sum(tf.square(data)))
+        return tf.maximum(0.005, tf.sqrt(tf.reduce_sum(tf.square(data))))
