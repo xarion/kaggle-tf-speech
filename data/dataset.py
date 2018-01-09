@@ -213,7 +213,7 @@ class Dataset:
 
     def get_silent_records(self):
         with tf.variable_scope("silent_records"):
-            raw_data = self.get_random_background_noise()
+            raw_data = tf.zeros([self.parameters["audio_sample_rate"], 1])
             # raw_data = self.maybe_random_resample(raw_data)
             return raw_data, tf.constant(self.competition_labels_to_ids["silence"])
 
