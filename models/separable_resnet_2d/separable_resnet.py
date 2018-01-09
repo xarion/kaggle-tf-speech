@@ -22,6 +22,7 @@ class Model:
         self.global_avg_pooling = parameters["global_avg_pooling"]
         self.use_adam = parameters["use_adam"]
         self.sigmoid_unknown = parameters["sigmoid_unknown"]
+        self.class_only = parameters["class_only"]
         self.accuracy_regulated_decay = parameters["accuracy_regulated_decay"]
         self.loss_regulated_decay = parameters["loss_regulated_decay"]
         self.blocks = Blocks(self.training, parameters)
@@ -136,8 +137,9 @@ class Model:
                                                             labels=sigmoid_labels)
 
                 self.loss = tf.reduce_mean(class_cross_entropy * class_results)
-                self.loss += tf.reduce_mean(silent_unknown_cross_entropy)
-                self.loss += (1. - self.accuracy)
+                if not self.class_only:
+                    self.loss += tf.reduce_mean(silent_unknown_cross_entropy)
+                    self.loss += (1. - self.accuracy)
 
             if self.accuracy_regulated_decay:
                 self.loss = self.loss + (1 - self.accuracy) * self.decay()
@@ -180,8 +182,12 @@ class Model:
                 self.prediction = \
                     class_predictions - (class_predictions * accepted_silent_unknown_labels) \
                     + silent_unknown_labels * accepted_silent_unknown_labels
-
-            correct_prediction = tf.equal(self.prediction, self.labels)
+            if self.class_only:
+                class_indices = tf.cast(tf.less(self.labels, 11), tf.int32)
+                correct_prediction = tf.equal(tf.gather(self.prediction, class_indices),
+                                              tf.gather(self.labels, class_indices))
+            else:
+                correct_prediction = tf.equal(self.prediction, self.labels)
             self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
             tf.summary.scalar('accuracy_top1', self.accuracy)

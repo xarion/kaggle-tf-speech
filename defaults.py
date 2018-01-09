@@ -31,6 +31,7 @@ default_parameters_dict = {
     'loss_regulated_decay': False,
     'random_resample': True,
     'sigmoid_unknown': False,
+    'class_only': False,
 }
 
 default_parameters = default_parameters_dict.copy()

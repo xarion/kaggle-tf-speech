@@ -71,6 +71,9 @@ flags.DEFINE_integer('filter_size', default_parameters['filter_size'], 'length o
 flags.DEFINE_integer('stride_length', default_parameters['stride_length'], 'stride length to use')
 
 
+flags.DEFINE_bool('class_only', default_parameters['class_only'], 'Train only softmax classes when sigmoid_unknown is true.')
+
+
 FLAGS = flags.FLAGS
 
 
