@@ -101,7 +101,7 @@ class Model:
         else:
             with tf.variable_scope("flatten"):
                 shape = residual_layer.shape
-                dims = shape[1].value * shape[3].value
+                dims = shape[1].value * shape[2].value * shape[3].value
                 residual_layer = tf.reshape(residual_layer, shape=[-1, dims])
                 output_channels = dims
                 input_channels = output_channels
