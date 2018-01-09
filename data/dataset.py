@@ -63,7 +63,8 @@ class Dataset:
     def create_validation_inputs(self):
         with tf.device("/cpu:0"):
             random_selector_variable = tf.random_uniform([], minval=0, maxval=1, dtype=tf.float32)
-            silent_data, silent_labels = self.get_random_background_noise(with_zeros=True)
+            silent_data = self.get_random_background_noise(with_zeros=True)
+            silent_labels = tf.constant(self.competition_labels_to_ids["silence"])
             labeled_data, labeled_labels = self.get_labeled_records()
 
             raw_data, label_id = tf.cond(tf.less(random_selector_variable, tf.constant(1. / 12.)),
@@ -131,7 +132,6 @@ class Dataset:
             raw_data = tf.cond(tf.greater(max_val, 1),
                                true_fn=lambda: raw_data / max_val,
                                false_fn=lambda: raw_data)
-
 
             if self.mfcc_inputs:
                 data = self.wav_to_mfcc(raw_data)
