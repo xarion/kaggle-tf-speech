@@ -68,7 +68,8 @@ class Train:
 
 
                 last_step = step
-
+                if last_step % self.parameters['checkpoint_step'] == 0:
+                    self.save_checkpoint(step, max_accuracy)
                 # Do Validation sometimes
                 if last_step % self.parameters['validation_step'] == 0:
                     m, val_accuracy, confusion_matrix, = self.session.run([self.merged_summaries,

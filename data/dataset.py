@@ -124,7 +124,7 @@ class Dataset:
                                          true_fn=lambda: (silent_data, silent_labels),
                                          false_fn=lambda: (labeled_data, labeled_labels))
 
-            raw_data = self.maybe_random_resample(raw_data)
+            raw_data = self.data_augmentation(raw_data)
 
             raw_data = tf.clip_by_value(raw_data, -1.2, 1.2)
             max_val = tf.reduce_max(tf.abs(raw_data))
@@ -213,7 +213,7 @@ class Dataset:
 
     def get_silent_records(self):
         with tf.variable_scope("silent_records"):
-            raw_data = self.get_random_background_noise(self.parameters['audio_sample_rate'])
+            raw_data = self.get_random_background_noise()
             # raw_data = self.maybe_random_resample(raw_data)
             return raw_data, tf.constant(self.competition_labels_to_ids["silence"])
 
@@ -269,13 +269,14 @@ class Dataset:
         lookup_table, indexed_dataset = np.unique(classes, return_inverse=True)
         return indexed_dataset, lookup_table
 
-    def get_random_background_noise(self, num_samples):
+    def get_random_background_noise(self, with_zeros=True):
 
         files = TRAINING_BACKGROUND_NOISES if self.split == "training" else VALIDATION_BACKGROUND_NOISES
         files = map(lambda file_name: TRAINING_DATA_DIR + file_name, files)
 
         background_files = map(self.decode_wav_file, files)
-        background_files.append(tf.zeros([num_samples, 1], dtype=tf.float32))
+        if with_zeros:
+            background_files.append(tf.zeros([self.parameters['audio_sample_rate'], 1], dtype=tf.float32))
         # background_files = tf.convert_to_tensor(files)
 
         num_cases = len(background_files)
@@ -285,11 +286,11 @@ class Dataset:
         random_background = control_flow_ops.merge(
             [control_flow_ops.switch(background_files[case], tf.equal(sel, case))[1]
              for case in range(0, num_cases)])[0]
-        random_background = tf.random_crop(random_background, [num_samples, 1])
+        random_background = tf.random_crop(random_background, [self.parameters['audio_sample_rate'], 1])
         return random_background
 
     def get_background_noise(self):
-        background_sample = self.get_random_background_noise(self.parameters['audio_sample_rate'])
+        background_sample = self.get_random_background_noise()
         background_multiplier = tf.random_uniform([],
                                                   minval=self.parameters['background_multiplier_min'],
                                                   maxval=self.parameters['background_multiplier_max'],
@@ -356,8 +357,12 @@ class Dataset:
         return resampled_data
 
     def add_white_noise(self, data):
-        white_noise = tf.random_uniform([self.input_dimensions[0], 1], minval=-0.005, maxval=0.005)
-        return tf.add(data, white_noise)
+        white_noise = tf.random_uniform([self.input_dimensions[0], 1], minval=-1, maxval=1)
+        return self.add_energy_scaled_noise(data, white_noise)
+
+    def add_background_noise(self, data):
+        background_noise = self.get_random_background_noise(with_zeros=False)
+        return self.add_energy_scaled_noise(data, background_noise, 0.1)
 
     def pitch_shift(self, data):
         coefficient = tf.random_uniform([], minval=5, maxval=15, dtype=tf.float32) / 10
@@ -365,10 +370,18 @@ class Dataset:
         # return (data + constant) * coefficient
         return data * coefficient
 
-    def maybe_random_resample(self, data, num_samples=16000):
-        if self.parameters["random_resample"]:
-            # data = self.pitch_shift(data)
-            data = self.time_shift(data, num_samples)
-            # data = self.add_white_noise(data)
+    def data_augmentation(self, data):
+        # data = self.pitch_shift(data)
+        # data = self.time_shift(data, num_samples)
+        # data = self.add_white_noise(data)
+        data = self.add_background_noise(data)
 
         return data
+
+    def add_energy_scaled_noise(self, data, noise, coefficient=0.05):
+        data_energy = tf.sqrt(tf.reduce_sum(tf.square(data)))
+        noise_energy = self.get_energy(noise)
+        return data + coefficient * noise * data_energy / noise_energy
+
+    def get_energy(self, data):
+        return tf.sqrt(tf.reduce_sum(tf.square(data)))
