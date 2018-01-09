@@ -358,27 +358,25 @@ class Dataset:
 
     def add_white_noise(self, data):
         white_noise = tf.random_uniform([self.input_dimensions[0], 1], minval=-1, maxval=1)
-        return self.add_energy_scaled_noise(data, white_noise)
+        return self.add_energy_scaled_noise(data, white_noise, coefficient=0.05)
 
     def add_background_noise(self, data):
         background_noise = self.get_random_background_noise(with_zeros=False)
         return self.add_energy_scaled_noise(data, background_noise, 0.1)
 
-    def pitch_shift(self, data):
+    def volume_shift(self, data):
         coefficient = tf.random_uniform([], minval=5, maxval=15, dtype=tf.float32) / 10
-        # constant = tf.random_uniform([], minval=-2, maxval=2, dtype=tf.float32) / (2 ** 15 / 100)
-        # return (data + constant) * coefficient
         return data * coefficient
 
     def data_augmentation(self, data):
-        # data = self.pitch_shift(data)
-        # data = self.time_shift(data, num_samples)
-        # data = self.add_white_noise(data)
+        data = self.volume_shift(data)
+        data = self.time_shift(data)
+        data = self.add_white_noise(data)
         data = self.add_background_noise(data)
 
         return data
 
-    def add_energy_scaled_noise(self, data, noise, coefficient=0.05):
+    def add_energy_scaled_noise(self, data, noise, coefficient):
         data_energy = tf.sqrt(tf.reduce_sum(tf.square(data)))
         noise_energy = self.get_energy(noise)
         return data + coefficient * noise * data_energy / noise_energy
